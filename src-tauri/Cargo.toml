@@ -1,0 +1,28 @@
+[package]
+name = "langu-account-tool"
+version = "0.1.0"
+description = "Langu multi-account desktop workspace"
+authors = ["Langu"]
+edition = "2021"
+
+[lib]
+name = "langu_account_tool_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[features]
+default = []
+custom-protocol = ["tauri/custom-protocol"]
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tauri = { version = "=2.12.3", features = ["unstable", "devtools"] }
+thiserror = "2"
+tokio = { version = "1", features = ["sync", "time"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+chrono = "0.4"
+md5 = "0.7"
+uuid = { version = "1", features = ["v4"] }

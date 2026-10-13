@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Only the local workspace shell may access Tauri APIs",
+  "webviews": ["main"],
+  "permissions": ["core:event:default"]
+}

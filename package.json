@@ -1,0 +1,44 @@
+{
+  "name": "langu-account-tool",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "engines": {
+    "node": ">=18.20.8"
+  },
+  "packageManager": "pnpm@11.25.0",
+  "scripts": {
+    "dev": "tauri dev",
+    "dev:desktop": "tauri dev --config src-tauri/tauri.preview.conf.json",
+    "dev:frontend": "vite --host 127.0.0.1 --port 1430",
+    "build": "tauri build",
+    "build:frontend": "vue-tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "typecheck": "vue-tsc --noEmit",
+    "lint": "eslint .",
+    "test": "node --test tests",
+    "check": "pnpm typecheck && pnpm lint && pnpm test",
+    "test:system": "node scripts/test-system.mjs",
+    "format": "prettier --write ."
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2.12.3",
+    "lucide-vue-next": "^0.468.0",
+    "pinia": "^3.0.0",
+    "vue": "^3.5.44",
+    "vue-router": "^4.0.0"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.12.2",
+    "@types/node": "^18.19.0",
+    "@vitejs/plugin-vue": "^5.2.4",
+    "eslint": "^9.39.1",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-vue": "^10.5.1",
+    "prettier": "latest",
+    "typescript-eslint": "^8.71.2",
+    "typescript": "^5.9.3",
+    "vite": "^5.4.21",
+    "vue-tsc": "latest"
+  }
+}
