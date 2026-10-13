@@ -11,6 +11,9 @@ pub fn run() {
     tauri::Builder::default()
         .manage(state::AppState::default())
         .setup(|app| {
+            if let Some(window) = app.get_webview_window("main") {
+                window.set_icon(tauri::include_image!("icons/32x32.png"))?;
+            }
             let handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
                 loop {

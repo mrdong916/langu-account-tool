@@ -11,8 +11,8 @@ import {
   ShieldCheck,
   X,
   Wrench,
-  PanelLeftClose,
-  PanelLeftOpen,
+  ChevronLeft,
+  ChevronRight,
   LogIn,
   ShieldAlert,
   Home,
@@ -21,7 +21,6 @@ import {
   Minus,
 } from 'lucide-vue-next';
 import AccountAvatar from '@/components/account/AccountAvatar.vue';
-import languLogo from '@/assets/images/langu-logo.png';
 import UserSearchDialog from '@/components/account/UserSearchDialog.vue';
 import SettingsView from '@/views/settings/SettingsView.vue';
 import { useWorkspaceStore } from '@/stores/workspace';
@@ -42,6 +41,10 @@ const address = ref('');
 const addressFocused = ref(false);
 const filter = ref('');
 const collapsed = ref(localStorage.getItem('langu-sidebar-collapsed') === 'true');
+const primaryName = computed(() => {
+  const account = store.primary?.account;
+  return account?.realname && account.realname !== account.username ? account.realname : '主账号';
+});
 const gateBlocked = computed(() =>
   ['checking', 'denied', 'unavailable'].includes(store.state.access.status),
 );
@@ -164,52 +167,34 @@ async function closeWorkspace() {
 <template>
   <div class="workspace-shell" :class="{ 'sidebar-collapsed': collapsed }">
     <aside class="account-sidebar">
-      <div class="brand">
-        <img class="brand-mark" :src="languLogo" alt="兰谷" />
-        <div>
-          <h1>兰谷多账号工具</h1>
-          <span>LANGU WORKSPACE</span>
-        </div>
-      </div>
-      <div class="sidebar-toggle">
+      <div class="sidebar-header">
         <button
-          class="icon-button"
+          class="account-item primary-profile"
+          :class="{ active: store.state.active === 'primary' }"
+          :disabled="store.busy || !store.primary"
+          :title="`${primaryName} · ${primaryStatus()}`"
+          :aria-label="`主账号，${primaryStatus()}`"
+          :aria-pressed="store.state.active === 'primary'"
+          @click="store.select('primary')"
+        >
+          <AccountAvatar :src="store.primary?.account?.avatar" primary />
+          <span class="account-text">
+            <strong>{{ primaryName }}</strong>
+            <small>
+              <span class="status-dot" :class="{ pending: !store.authorized }" />
+              {{ primaryStatus() }}
+            </small>
+          </span>
+        </button>
+        <button
+          class="icon-button sidebar-toggle"
           :title="collapsed ? '展开侧栏' : '折叠侧栏'"
           :aria-label="collapsed ? '展开侧栏' : '折叠侧栏'"
           :aria-expanded="!collapsed"
           @click="collapsed = !collapsed"
         >
-          <PanelLeftOpen v-if="collapsed" :size="19" /><PanelLeftClose v-else :size="19" />
+          <ChevronRight v-if="collapsed" :size="16" /><ChevronLeft v-else :size="16" />
         </button>
-      </div>
-      <div class="sidebar-label">主账号<span class="badge primary-badge">主</span></div>
-      <button
-        v-if="store.primary"
-        class="account-item"
-        :class="{ active: store.state.active === 'primary' }"
-        :disabled="store.busy"
-        :title="store.primary.account?.username || '主账号'"
-        @click="store.select('primary')"
-      >
-        <AccountAvatar
-          :src="store.primary.account?.avatar"
-          :username="store.primary.account?.username"
-          primary
-        />
-        <span class="account-text"
-          ><strong>{{ store.primary.account?.username || '等待登录' }}</strong
-          ><small
-            ><span class="status-dot" :class="{ pending: store.primary.status !== 'ready' }" />{{
-              primaryStatus()
-            }}</small
-          ></span
-        >
-      </button>
-      <div v-else class="account-item inactive">
-        <AccountAvatar primary /><span class="account-text"
-          ><strong>主账号未登录</strong
-          ><small>{{ store.state.settings.username || '等待连接系统' }}</small></span
-        >
       </div>
       <div class="sidebar-divider" />
       <div class="sidebar-label">
@@ -452,7 +437,9 @@ async function closeWorkspace() {
         <footer class="browser-status">
           <span
             ><ShieldCheck :size="13" />{{
-              store.active.account?.username || '等待主账号登录'
+              store.active.role === 'primary'
+                ? `${primaryName} · ${primaryStatus()}`
+                : store.active.account?.username
             }}</span
           ><span class="page-title">{{ store.active.title }}</span>
         </footer>

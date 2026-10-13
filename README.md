@@ -3,10 +3,14 @@
 面向兰谷产品、运营和测试人员的桌面账号工作区。
 使用 Rust + Tauri 2 + Vue 3，支持主账号登录、检索用户、授权代登录及独立会话切换。
 
-代码仓库：`git@codeup.aliyun.com:6889be5d349fe2cce7f70454/tool/langu-account-tool.git`，主分支 `main`。
+GitHub：`git@github.com:mrdong916/langu-account-tool.git`，主分支 `main`。
+Codeup：`git@codeup.aliyun.com:6889be5d349fe2cce7f70454/tool/langu-account-tool.git`。
 公司 Logo 源自 http://languwin.com/logo.png，随程序本地打包；图标更新执行 `scripts/generate-icon.ps1`。
+窗口、应用和安装器使用公司图标；侧栏主账号入口使用账号头像。
 
 ## 快速开始
+
+需要 Node.js 22.13+、package.json 指定的 pnpm 版本、Rust stable，以及对应平台的 Tauri 系统依赖。
 
 ```sh
 pnpm install --frozen-lockfile
@@ -31,7 +35,7 @@ pnpm dev
 
 ```text
 langu-account-tool/
-  .github/workflows/   多平台检查流水线
+  .github/workflows/   多平台检查、安装包与草稿 Release 流水线
   docs/               产品、架构、协议、平台矩阵
   scripts/            开发/打包入口、本地测试系统
   tests/              登录缓存协议测试
@@ -75,5 +79,6 @@ pnpm build
 ```
 
 平台范围见 [docs/platforms.md](docs/platforms.md)，接入协议见 [docs/api.md](docs/api.md)。
-`.github/workflows/check.yml` 是 GitHub Actions 格式；当前 Codeup 仓库尚未配置云效流水线，可使用 `scripts/release.ps1` 运行本地发布检查。
+GitHub Actions 的 `Project checks` 执行三平台检查，`Build desktop installers` 自动构建安装包；使用方式与架构详见 [docs/release.md](docs/release.md)。
+Codeup 仓库尚未配置云效流水线；本地可使用 `scripts/release.ps1` 运行发布检查。
 正式签名、安装包与多架构真机验证需按发布矩阵完成；当前并未宣称所有平台已经验证。

@@ -75,7 +75,7 @@ function submit(open: boolean) {
         />记住地址、主账号并保持登录状态</label
       >
       <div v-if="form.username && form.remember" class="remembered-account">
-        <UserRound :size="18" /><span>上次登录</span><strong>{{ form.username }}</strong>
+        <UserRound :size="18" /><span>已记住主账号</span>
       </div>
       <div class="form-actions">
         <button

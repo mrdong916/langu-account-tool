@@ -22,5 +22,6 @@ watch(
     />
     <span v-else-if="username">{{ username.slice(0, 1).toUpperCase() }}</span>
     <UserRound v-else :size="18" />
+    <span v-if="primary" class="avatar-primary-badge" aria-hidden="true">主</span>
   </span>
 </template>

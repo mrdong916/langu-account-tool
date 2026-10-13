@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "type": "module",
   "engines": {
-    "node": ">=18.20.8"
+    "node": ">=22.13.0"
   },
   "packageManager": "pnpm@11.25.0",
   "scripts": {
@@ -16,7 +16,7 @@
     "preview": "vite preview",
     "typecheck": "vue-tsc --noEmit",
     "lint": "eslint .",
-    "test": "node --test tests",
+    "test": "node --test tests/*.test.mjs",
     "check": "pnpm typecheck && pnpm lint && pnpm test",
     "test:system": "node scripts/test-system.mjs",
     "format": "prettier --write ."
