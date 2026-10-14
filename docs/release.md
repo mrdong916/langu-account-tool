@@ -9,7 +9,8 @@ GitHub 仓库：`mrdong916/langu-account-tool`，主分支 `main`。
 - GitHub 仓库 Actions → Build and release → Run workflow：手动选择分支构建；选择 `main` 时也会自动发布，其他分支只构建。
 - 构建完成后，在运行详情页的 Artifacts 下载 `installers-<Rust target>`；压缩包内为安装包，保留 30 天。
 - GitHub Releases 提供全部安装包及 `SHA256SUMS.txt`。上传时先创建草稿，上传成功后自动公开，无需维护者手工发布。
-- Release 标题只显示版本标签。附件统一使用 `langu-account-tool` 前缀（例如 `langu-account-tool_0.1.0_universal.dmg`），避免 GitHub 清理中文文件名时丢失软件名称；校验清单使用最终附件名。
+- Release 标题只显示版本标签。下载列表显示中文名称，例如 `兰谷多账号工具_0.1.0_aarch64.dmg.zip`；ZIP 内安装包也使用中文软件名。GitHub 会清理附件文件名中的中文，实际 ZIP 下载文件名仅保留版本、架构和格式，例如 `0.1.0_aarch64.dmg.zip`。
+- `scripts/prepare-release.py` 将各平台安装包改为中文文件名并封装为 UTF-8 ZIP。`SHA256SUMS.txt` 使用实际下载的 ZIP 文件名计算校验值。
 - `check.yml` 在 pull_request、手动执行或由构建工作流调用时运行三平台类型、lint、测试、格式及 Clippy 检查；拉取请求不触发安装包发布。
 - 其他分支和标签推送不触发发布；连续推送不会取消较早提交的构建。
 
@@ -20,7 +21,8 @@ GitHub 仓库：`mrdong916/langu-account-tool`，主分支 `main`。
 | Windows | x64 | windows-2022 | NSIS .exe、.msi |
 | Windows | x86 | windows-2022 | NSIS .exe、.msi |
 | Windows | ARM64 | windows-2022 交叉编译 | NSIS .exe |
-| macOS 14+ | Intel + Apple Silicon 通用版 | macos-14 | .dmg |
+| macOS 14+ | Intel x64 | macos-15-intel | _x64.dmg |
+| macOS 14+ | Apple Silicon ARM64 | macos-15 | _aarch64.dmg |
 | Linux | x64 | ubuntu-22.04 | .deb、.rpm、.AppImage |
 | Linux | ARM64 | ubuntu-24.04-arm | .deb、.rpm、.AppImage |
 
@@ -30,6 +32,7 @@ Windows ARM32、macOS 32 位、Linux ARMv7/x86 及其他 CPU 架构不在本工�
 
 Windows MSI 使用 `bundle.windows.wix.language = "zh-CN"`，匹配中文产品名所需的代码页；NSIS 的语言配置独立生效。
 构建开启 `--verbose`，WiX 链接失败时可在 Actions 日志查看 `light.exe` 的具体诊断。
+macOS 分别在 Intel 和 ARM runner 构建，发布前必须同时存在两种架构的 DMG ZIP。Intel Mac 下载 `_x64.dmg.zip`，M 系列 Mac 下载 `_aarch64.dmg.zip`，解压后打开中文名称的 DMG。其他平台也先解压，再运行或安装内部文件。
 
 ## 版本发布
 

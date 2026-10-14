@@ -36,10 +36,15 @@ jobs:
             target: aarch64-pc-windows-msvc
             rust-targets: aarch64-pc-windows-msvc
             bundles: nsis
-          - name: macOS Universal
-            os: macos-14
-            target: universal-apple-darwin
-            rust-targets: aarch64-apple-darwin,x86_64-apple-darwin
+          - name: macOS Intel
+            os: macos-15-intel
+            target: x86_64-apple-darwin
+            rust-targets: x86_64-apple-darwin
+            bundles: dmg
+          - name: macOS Apple Silicon
+            os: macos-15
+            target: aarch64-apple-darwin
+            rust-targets: aarch64-apple-darwin
             bundles: dmg
           - name: Linux x64
             os: ubuntu-22.04
@@ -118,18 +123,8 @@ jobs:
           merge-multiple: true
       - name: Prepare release assets
         run: |
-          mkdir release
-          product_name=$(node -p "require('./src-tauri/tauri.conf.json').productName")
-          package_name=$(node -p "require('./package.json').name")
-          while IFS= read -r -d '' file; do
-            name=$(basename "$file")
-            name="${name/#$product_name/$package_name}"
-            if [[ "$name" != "$package_name"* || -e "release/$name" ]]; then
-              echo "Unexpected or duplicate installer name: $name" >&2
-              exit 1
-            fi
-            cp -- "$file" "release/$name"
-          done < <(find installers -type f -print0)
+          python3 tests/release_test.py
+          python3 scripts/prepare-release.py
           cd release
           sha256sum * > SHA256SUMS.txt
       - name: Publish all installers together
@@ -142,9 +137,16 @@ jobs:
           tag="v${version}-build.${GITHUB_RUN_NUMBER}.${GITHUB_RUN_ATTEMPT}-${GITHUB_SHA:0:7}"
           shopt -s nullglob
           for extension in exe msi deb rpm AppImage dmg; do
-            matches=(release/*."$extension")
+            matches=(release/*."$extension".zip)
             if (( ${#matches[@]} == 0 )); then
               echo "Missing installer: $extension" >&2
+              exit 1
+            fi
+          done
+          for arch in x64 aarch64; do
+            matches=(release/*_"${arch}".dmg.zip)
+            if (( ${#matches[@]} != 1 )); then
+              echo "Expected one macOS installer for $arch" >&2
               exit 1
             fi
           done
@@ -154,10 +156,15 @@ jobs:
           提交：${GITHUB_SHA}
           构建记录：${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}
 
-          安装包：Windows x64/x86/ARM64、Linux x64/ARM64、macOS 14+ Intel / Apple Silicon 通用 DMG。
-          SHA256SUMS.txt 提供安装包校验值。当前安装包未配置发行证书签名及 macOS 公证。
+          安装包：Windows x64/x86/ARM64、Linux x64/ARM64、macOS 14+ Intel（x64.dmg.zip）和 Apple Silicon（aarch64.dmg.zip）。
+          下载后解压即可获得以“兰谷多账号工具”命名的安装包。GitHub 不支持附件中文文件名，因此下载列表使用中文显示名称，ZIP 下载文件名仅包含版本、架构和包格式。
+          SHA256SUMS.txt 提供 ZIP 校验值。当前安装包未配置发行证书签名及 macOS 公证。
           EOF
-          gh release create "$tag" release/* \
+          assets=()
+          while IFS= read -r asset; do
+            assets+=("$asset")
+          done < release-assets.txt
+          gh release create "$tag" "${assets[@]}" release/SHA256SUMS.txt \
             --target "$GITHUB_SHA" \
             --title "$tag" \
             --notes-file release-notes.md \

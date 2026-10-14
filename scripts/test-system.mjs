@@ -66,11 +66,15 @@ const server = createServer(async (req, res) => {
     }
     return json({ success: false }, 404);
   }
+  // Reproduce a lazy login component clearing credentials while the next navigation is pending.
+  if (url.pathname === '/app') await new Promise(resolve => setTimeout(resolve, 150));
   res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
   res.end(`<!doctype html><html lang="en"><meta charset="utf-8"><title>Local account isolation test</title><style>body{font:16px system-ui;padding:40px;color:#245347}h1{font-size:24px}input,button{padding:10px;margin:8px}pre{white-space:pre-wrap}</style><h1>Account isolation fixture</h1><p id="account"></p><label>Draft <input id="draft" placeholder="Session-specific draft"></label><p><a href="/second">Second page</a> | <a href="/popup" target="_blank">New-window link</a></p><button id="logout">Local logout</button><button id="login">Fixture main login</button><button id="expire">Expire current account on server</button><script>
   const set=(k,v)=>localStorage.setItem('pro__'+k,JSON.stringify({value:v,expire:null}));
   const get=k=>JSON.parse(localStorage.getItem('pro__'+k)||'null')?.value;
-  if(!get('Access-Token')&&!sessionStorage.getItem('fixture-initialized')){set('Access-Token','fixture-main-token');set('Login_Userinfo',${JSON.stringify(main)});set('canLogin',true);}
+  if(location.pathname==='/app'&&!get('Access-Token')){
+    setTimeout(()=>{localStorage.removeItem('pro__Access-Token');history.replaceState(null,'','/user/login');document.getElementById('account').textContent='Current account: signed out';},50);
+  }else if(location.pathname==='/'&&!get('Access-Token')&&!sessionStorage.getItem('fixture-initialized')){set('Access-Token','fixture-main-token');set('Login_Userinfo',${JSON.stringify(main)});set('canLogin',true);}
   sessionStorage.setItem('fixture-initialized','1');
   document.getElementById('account').textContent='Current account: '+(get('Login_Userinfo')?.username??'signed out');
   const draft=document.getElementById('draft');draft.value=localStorage.getItem('draft')||'';draft.oninput=()=>localStorage.setItem('draft',draft.value);

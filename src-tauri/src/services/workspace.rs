@@ -75,6 +75,9 @@ pub fn position(app: &AppHandle) -> AppResult<()> {
                 && bounds.width > 0.0
                 && bounds.height > 0.0
             {
+                #[cfg(target_os = "macos")]
+                crate::infra::macos::set_bounds(&view, bounds)?;
+                #[cfg(not(target_os = "macos"))]
                 view.set_bounds(tauri::Rect {
                     position: LogicalPosition::new(bounds.x, bounds.y).into(),
                     size: LogicalSize::new(bounds.width, bounds.height).into(),
@@ -125,7 +128,12 @@ pub fn create(
         .as_ref()
         .map(|v| langu::account(&v["result"]["userInfo"], config))
         .transpose()?;
-    let mut builder = WebviewBuilder::new(&id, WebviewUrl::External(url.clone())).devtools(true);
+    let has_bootstrap = payload.is_some();
+    let mut initial_url = url.clone();
+    if cfg!(target_os = "macos") && has_bootstrap {
+        initial_url = tauri::Url::parse("about:blank").expect("valid blank URL");
+    }
+    let mut builder = WebviewBuilder::new(&id, WebviewUrl::External(initial_url)).devtools(true);
     // Each account has a distinct engine profile, including cookies and IndexedDB.
     let profile = if role == "primary" && config.remember {
         format!("main-{:x}", md5::compute(&config.login_url))
@@ -154,8 +162,15 @@ pub fn create(
     let handle = app.clone();
     let label = id.clone();
     builder = builder.on_navigation(move |url| {
+        if cfg!(target_os = "macos") && url.as_str() == "about:blank" {
+            return true;
+        }
         if !matches!(url.scheme(), "http" | "https") {
             return false;
+        }
+        #[cfg(target_os = "macos")]
+        if url.path() == crate::infra::macos::BOOTSTRAP_PATH {
+            return true;
         }
         update_session(&handle, &label, |s| s.url = url.to_string());
         true
@@ -165,18 +180,29 @@ pub fn create(
     let landing = url.clone();
     builder = builder
         .on_page_load(move |view, event| {
+            #[cfg(target_os = "macos")]
+            let internal_page = event.url().path() == crate::infra::macos::BOOTSTRAP_PATH
+                || event.url().as_str() == "about:blank";
+            #[cfg(not(target_os = "macos"))]
+            let internal_page = false;
             update_session(&handle, &label, |s| {
                 s.loading = event.event() == PageLoadEvent::Started;
-                s.url = event.url().to_string();
+                if !internal_page {
+                    s.url = event.url().to_string();
+                }
             });
-            if event.event() == PageLoadEvent::Finished
-                && event.url().origin().ascii_serialization() == origin
-            {
+            let can_bootstrap = event.event() == PageLoadEvent::Finished
+                && event.url().origin().ascii_serialization() == origin;
+            #[cfg(target_os = "macos")]
+            let can_bootstrap =
+                can_bootstrap && event.url().path() == crate::infra::macos::BOOTSTRAP_PATH;
+            if can_bootstrap {
                 let payload = pending_bootstrap
                     .lock()
                     .ok()
                     .and_then(|mut value| value.take());
                 if let Some(payload) = payload {
+                    update_session(view.app_handle(), view.label(), |s| s.loading = true);
                     let script = format!(
                         "{}\nbootstrapLanguAccount({}, {});",
                         include_str!("../../scripts/bootstrap.js"),
@@ -185,17 +211,24 @@ pub fn create(
                     );
                     let target = landing.clone();
                     let callback_view = view.clone();
-                    let _ = view.eval_with_callback(script, move |result| {
-                        if result == "true" {
-                            let _ = callback_view.navigate(target.clone());
-                        } else {
+                    let result = view.eval_with_callback(script, move |result| {
+                        if result != "true" || callback_view.navigate(target.clone()).is_err() {
                             update_session(
                                 callback_view.app_handle(),
                                 callback_view.label(),
-                                |s| s.status = "error".into(),
+                                |s| {
+                                    s.status = "error".into();
+                                    s.loading = false;
+                                },
                             );
                         }
                     });
+                    if result.is_err() {
+                        update_session(view.app_handle(), view.label(), |s| {
+                            s.status = "error".into();
+                            s.loading = false;
+                        });
+                    }
                 }
             }
         })
@@ -245,6 +278,10 @@ pub fn create(
     ) {
         Ok(view) => {
             view.hide()?;
+            #[cfg(target_os = "macos")]
+            if has_bootstrap {
+                prepare_login(&view, url)?;
+            }
         }
         Err(error) => {
             app.state::<AppState>().lock()?.sessions.remove(&id);
@@ -252,6 +289,14 @@ pub fn create(
         }
     }
     select(app, id)
+}
+
+pub fn prepare_login(view: &Webview, landing: tauri::Url) -> AppResult<()> {
+    #[cfg(target_os = "macos")]
+    crate::infra::macos::prepare_login(view, landing)?;
+    #[cfg(not(target_os = "macos"))]
+    view.navigate(landing)?;
+    Ok(())
 }
 
 pub async fn read_auth(app: &AppHandle, id: &str) -> AppResult<Option<Value>> {
@@ -522,6 +567,10 @@ pub async fn sync_active(app: &AppHandle) -> AppResult<()> {
         return Ok(());
     };
     let url = http_url(location)?;
+    #[cfg(target_os = "macos")]
+    if url.path() == crate::infra::macos::BOOTSTRAP_PATH {
+        return Ok(());
+    }
     update_session(app, &id, |session| session.url = url.to_string());
     if id != "primary" && url.origin() == http_url(&config.login_url)?.origin() {
         let auth = read_auth(app, &id).await?;

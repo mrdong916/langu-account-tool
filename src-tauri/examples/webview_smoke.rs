@@ -19,7 +19,46 @@ async fn expect_script(view: &Webview, script: &str) -> AppResult<()> {
         }
         tokio::time::sleep(Duration::from_millis(200)).await;
     }
-    Err(AppError::Message("WebView smoke assertion failed".into()))
+    Err(AppError::Message(format!(
+        "WebView smoke assertion failed in {}: {script}",
+        view.label()
+    )))
+}
+
+#[cfg(target_os = "macos")]
+async fn check_bounds(app: &AppHandle, view: &Webview) -> AppResult<()> {
+    let window = app.get_window("main").unwrap();
+    for (width, height, x) in [(1360.0, 900.0, 260.0), (960.0, 700.0, 68.0)] {
+        window.set_size(tauri::LogicalSize::new(width, height))?;
+        tokio::time::sleep(Duration::from_millis(200)).await;
+        workspace::set_bounds(
+            app,
+            Bounds {
+                x,
+                y: 57.0,
+                width: width - x,
+                height: height - 140.0,
+            },
+            true,
+        )?;
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        view.with_webview(move |native| unsafe {
+            let view = &*native.inner().cast::<objc2_web_kit::WKWebView>();
+            let parent = view.superview().unwrap();
+            let frame = view.frame();
+            let top = parent.frame().size.height - frame.origin.y - frame.size.height;
+            let _ = tx.send((top - parent.safeAreaInsets().top, frame.origin.x));
+        })?;
+        let (top, left) = rx
+            .await
+            .map_err(|_| AppError::Message("Bounds callback lost".into()))?;
+        if (top - 57.0).abs() > 1.0 || (left - x).abs() > 1.0 {
+            return Err(AppError::Message(format!(
+                "Toolbar overlap: top={top}, left={left}"
+            )));
+        }
+    }
+    Ok(())
 }
 
 async fn check(app: &AppHandle) -> AppResult<()> {
@@ -39,6 +78,7 @@ async fn check(app: &AppHandle) -> AppResult<()> {
         .into(),
         api_base_url: "http://127.0.0.1:1432".into(),
         remember: false,
+        landing_path: "/app".into(),
         ..Settings::default()
     };
     app.state::<AppState>().lock()?.settings = config.clone();
@@ -73,6 +113,8 @@ async fn check(app: &AppHandle) -> AppResult<()> {
         "document.getElementById('account')?.textContent === 'Current account: test.admin'",
     )
     .await?;
+    #[cfg(target_os = "macos")]
+    check_bounds(app, &primary).await?;
     workspace::sync_primary(app).await?;
     let credential = workspace::authorized_primary(app).await?;
     let payload = langu::impersonate(&config, &credential, "test.user.01".into()).await?;
@@ -103,6 +145,9 @@ async fn check(app: &AppHandle) -> AppResult<()> {
     .await?;
     workspace::select(app, "smoke-child".into())?;
     workspace::sync_active(app).await?;
+    if app.state::<AppState>().lock()?.sessions["smoke-child"].status != "ready" {
+        return Err(AppError::Message("Child login not ready".into()));
+    }
     expect_script(&child, "localStorage.getItem('draft') === 'CHILD-DRAFT'").await?;
     let main_auth = workspace::read_auth(app, "primary").await?;
     let child_auth = workspace::read_auth(app, "smoke-child").await?;
@@ -117,6 +162,33 @@ async fn check(app: &AppHandle) -> AppResult<()> {
     {
         return Err(AppError::Message("Account isolation check failed".into()));
     }
+    // Logout and reload must not replay the consumed bootstrap payload.
+    child.eval("document.getElementById('logout').click()")?;
+    expect_script(
+        &child,
+        "!localStorage.getItem('pro__Access-Token') && document.readyState === 'complete'",
+    )
+    .await?;
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    workspace::sync_active(app).await?;
+    if app.state::<AppState>().lock()?.sessions["smoke-child"].status != "expired" {
+        return Err(AppError::Message("Logout replayed credentials".into()));
+    }
+    langu_account_tool_lib::commands::workspace::relogin_session(
+        app.get_webview("main").unwrap(),
+        app.clone(),
+        app.state(),
+        "smoke-child".into(),
+    )
+    .await?;
+    expect_script(
+        &child,
+        "document.getElementById('account')?.textContent === 'Current account: test.user.01'",
+    )
+    .await?;
+    workspace::sync_active(app).await?;
+    expect_script(&child, "localStorage.getItem('draft') === 'CHILD-DRAFT'").await?;
+    expect_script(&primary, "localStorage.getItem('draft') === 'PRIMARY-DRAFT' && document.getElementById('account')?.textContent === 'Current account: test.admin'").await?;
     workspace::close_children(app)?;
     workspace::close(app, "primary")
 }

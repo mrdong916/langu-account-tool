@@ -40,7 +40,8 @@ sudo apt-get install libwebkit2gtk-4.1-dev build-essential curl wget file libxdo
 pnpm build
 pnpm exec tauri build --target i686-pc-windows-msvc
 pnpm exec tauri build --target aarch64-pc-windows-msvc
-pnpm exec tauri build --target universal-apple-darwin
+pnpm exec tauri build --target x86_64-apple-darwin --bundles dmg
+pnpm exec tauri build --target aarch64-apple-darwin --bundles dmg
 ```
 
 跨 target 前先通过 rustup 安装对应 target 并准备系统工具链。

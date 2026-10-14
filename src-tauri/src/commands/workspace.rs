@@ -163,18 +163,22 @@ pub async fn relogin_session(
         .map_err(|_| AppError::Message("登录状态不可用".into()))? = Some(payload);
     service::update_session(&app, &id, |s| {
         s.status = "checking".into();
+        s.loading = true;
         s.validated_at = None;
         s.auth_key = None;
     });
     let landing = http_url(&config.login_url)?
         .join(&config.landing_path)
         .map_err(|_| AppError::Message("跳转地址无效".into()))?;
-    if let Err(error) = view.navigate(landing) {
+    if let Err(error) = service::prepare_login(&view, landing) {
         if let Ok(mut payload) = session.bootstrap.lock() {
             payload.take();
         }
-        service::update_session(&app, &id, |s| s.status = "error".into());
-        return Err(error.into());
+        service::update_session(&app, &id, |s| {
+            s.status = "error".into();
+            s.loading = false;
+        });
+        return Err(error);
     }
     service::select(&app, id)
 }
