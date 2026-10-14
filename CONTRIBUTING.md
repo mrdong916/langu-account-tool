@@ -11,11 +11,12 @@ Linux/macOS 依赖和架构说明见 docs/platforms.md。
 
 ```sh
 pnpm install --frozen-lockfile
-pnpm dev
+pnpm tauri:dev
 ```
 
-前端已单独运行时：`pnpm dev:desktop`。
-也可以停止前端预览后直接运行 `pnpm dev`，避免固定开发端口 1430 被占用。
+桌面开发：`pnpm tauri:dev`，自动启动前端和桌面窗口。
+前端已通过 `pnpm start` 单独运行时：`pnpm tauri:dev:attached`。
+也可以停止前端预览后直接运行 `pnpm tauri:dev`，避免固定开发端口 1430 被占用。
 
 ```sh
 pnpm check

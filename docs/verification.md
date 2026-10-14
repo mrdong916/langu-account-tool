@@ -124,3 +124,10 @@ LANGU_SMOKE_MODE=remote 'work/WebView Smoke.app/Contents/MacOS/webview_smoke'
 - 透明提示页在原生应用中显示目标姓名，未抢占主窗口焦点；隐藏/显示窗口后子账号草稿保留。
 - `pnpm dev:attached` 实际启动独立开发 profile；`pnpm build:mac:arm64 --debug --ci` 生成中文 DMG，并复制到 `work/installers/aarch64-apple-darwin/debug/`。
 - Windows/Linux 的命令映射和错误宿主检查通过自动测试；本机不能验证其安装器与原生运行效果，需相应平台或 GitHub Actions 验证。线上用户目录契约未使用真实账号联调。
+
+## 2026-10-14 运行入口对齐
+
+- 按 nacos-control-panel 统一为 `tauri:dev` 和 `tauri:build:*`，更新当前开发文档；上节中的旧命令为当时的验收记录。
+- `pnpm tauri:dev` 实际自动启动 Vite、完成 Rust 编译并启动 macOS 桌面进程，前端 HTTP 响应正常。
+- `pnpm tauri:build:mac:arm --dry-run` 确认 ARM 目标和 APP/DMG 参数；此轮未重新生成安装包。
+- `pnpm check`（10 项 Node 测试）、`pnpm build:frontend`、`cargo fmt --check`、`cargo test`（10 项 Rust 测试）通过。

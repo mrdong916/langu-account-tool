@@ -14,10 +14,12 @@ Codeup：`git@codeup.aliyun.com:6889be5d349fe2cce7f70454/tool/langu-account-tool
 
 ```sh
 pnpm install --frozen-lockfile
-pnpm dev
+pnpm tauri:dev
 ```
 
-浏览器界面预览：`pnpm dev:frontend`，地址 http://127.0.0.1:1430/。
+开发和打包入口沿用 nacos-control-panel 的 `tauri:dev` / `tauri:build:*` 命名。
+`pnpm tauri:dev` 自动启动前端和桌面窗口，无需额外开一个终端。
+浏览器界面预览：`pnpm start`，地址 http://127.0.0.1:1430/。
 原生账号页面仅在桌面程序运行，浏览器预览不会伪造登录或通过 iframe 模拟隔离。
 
 ## 使用
@@ -77,7 +79,7 @@ langu-account-tool/
 pnpm check
 pnpm build:frontend
 cargo test --manifest-path src-tauri/Cargo.toml
-pnpm build
+pnpm tauri:build
 ```
 
 平台范围见 [docs/platforms.md](docs/platforms.md)，接入协议见 [docs/api.md](docs/api.md)。

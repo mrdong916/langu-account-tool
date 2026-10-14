@@ -4,23 +4,29 @@
 执行 `pnpm install --frozen-lockfile` 后使用以下命令。
 使用 nvm 时先执行 `nvm use`；本项目的 `.nvmrc` 指定 Node 22。
 
+命名沿用 nacos-control-panel；**本地运行只需要 `pnpm tauri:dev`**，自动启动前端和桌面窗口。
+也可以在 IDE 的 package.json 脚本列表里点击 `tauri:dev` 运行。
+
 | 用途 | 命令 |
 | --- | --- |
-| 当前系统桌面热更新调试 | `pnpm dev` |
-| Mac / Windows / Linux 调试 | `pnpm dev:mac` / `pnpm dev:win` / `pnpm dev:linux` |
-| 仅预览前端 | `pnpm dev:frontend` |
-| 连接已经启动的前端服务 | `pnpm dev:attached` |
-| 当前系统、当前架构安装包 | `pnpm build` |
-| Mac 当前架构 / ARM64 / Intel / Universal | `pnpm build:mac` / `pnpm build:mac:arm64` / `pnpm build:mac:intel` / `pnpm build:mac:universal` |
-| Windows x64 / x86 / ARM64 | `pnpm build:win` / `pnpm build:win:x86` / `pnpm build:win:arm64` |
-| Linux 当前架构 / x64 / ARM64 | `pnpm build:linux` / `pnpm build:linux:x64` / `pnpm build:linux:arm64` |
+| 桌面调试（所有系统） | `pnpm tauri:dev` |
+| 仅预览前端 | `pnpm start` |
+| 当前系统、当前架构安装包 | `pnpm tauri:build` |
+| Mac 当前架构 | `pnpm tauri:build:mac` |
+| Mac ARM / Intel / Universal | `pnpm tauri:build:mac:arm` / `pnpm tauri:build:mac:intel` / `pnpm tauri:build:mac:universal` |
+| Windows x64 / x86 / ARM64 | `pnpm tauri:build:win` / `pnpm tauri:build:win:x86` / `pnpm tauri:build:win:arm` |
+| Linux 当前架构 / x64 / ARM64 | `pnpm tauri:build:linux` / `pnpm tauri:build:linux:x64` / `pnpm tauri:build:linux:arm` |
+
+仅当前端已单独启动时，使用 `pnpm tauri:dev:attached`。
+`pnpm dev` 和 `pnpm build` 保留为兼容入口，分别调用 `tauri:dev` 和 `tauri:build`。
 
 开发模式标识为 `com.langu.accounttool.dev`，设置、用户缓存和 WebView profile 与正式版本分离。前端修改热更新，Rust 修改重新编译。
 账号页面工具栏的扳手打开该账号 WebView 的开发者工具。
 
 构建结果会复制到 `work/installers/<Rust目标>/release/`，文件名使用“兰谷多账号工具”。
+Mac 输出 APP 和 DMG；中文名称 DMG 会同时复制到归档目录。
 原始 Tauri 产物位于 `src-tauri/target/<Rust目标>/release/bundle/`。
-可加 `--debug` 生成包含调试信息的安装包，对应目录为 `debug`；例如 `pnpm build:mac:arm64 --debug --ci`。
+可加 `--debug` 生成包含调试信息的安装包，对应目录为 `debug`；例如 `pnpm tauri:build:mac:arm --debug --ci`。
 可加 `--dry-run` 只检查当前平台并显示命令。
 
 ## 系统依赖与架构

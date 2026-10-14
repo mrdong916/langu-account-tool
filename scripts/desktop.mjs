@@ -33,11 +33,10 @@ export function buildPlan(mode, platform, arch, host = process.platform, hostArc
     throw new Error(
       `不支持 ${platform}/${arch}，可选架构：${Object.keys(targets[platform] || {}).join(', ')}`,
     );
-  if (mode === 'dev') return { target, args: ['dev', '--config', 'src-tauri/tauri.dev.conf.json'] };
   if (mode !== 'build')
-    throw new Error('用法：desktop.mjs dev|build auto|mac|win|linux [x64|arm64|ia32|universal]');
+    throw new Error('用法：desktop.mjs build auto|mac|win|linux [x64|arm64|ia32|universal]');
   let bundles = 'deb,rpm,appimage';
-  if (platform === 'mac') bundles = 'dmg';
+  if (platform === 'mac') bundles = 'app,dmg';
   if (platform === 'win') bundles = arch === 'arm64' ? 'nsis' : 'nsis,msi';
   return { target, args: ['build', '--target', target, '--bundles', bundles] };
 }

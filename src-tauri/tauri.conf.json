@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "identifier": "com.langu.accounttool",
   "build": {
-    "beforeDevCommand": "pnpm dev:frontend",
+    "beforeDevCommand": "pnpm start",
     "beforeBuildCommand": "pnpm build:frontend",
     "devUrl": "http://127.0.0.1:1430",
     "frontendDist": "../dist"
