@@ -40,6 +40,9 @@
     ],
     "macOS": { "minimumSystemVersion": "14.0" },
     "windows": {
+      "wix": {
+        "language": "zh-CN"
+      },
       "nsis": {
         "installerIcon": "icons/icon.ico",
         "uninstallerIcon": "icons/icon.ico",

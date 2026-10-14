@@ -27,6 +27,9 @@ ARM64 Linux 安装包在 Ubuntu 24.04 构建，需匹配其 glibc / WebKitGTK �
 GitHub 组织策略、仓库套餐和 Actions 额度可能限制 runner 使用，特别是 ARM64 runner；若任务长期排队，检查仓库设置或配置同架构自托管 runner。
 Windows ARM32、macOS 32 位、Linux ARMv7/x86 及其他 CPU 架构不在本工作流中。
 
+Windows MSI 使用 `bundle.windows.wix.language = "zh-CN"`，匹配中文产品名所需的代码页；NSIS 的语言配置独立生效。
+构建开启 `--verbose`，WiX 链接失败时可在 Actions 日志查看 `light.exe` 的具体诊断。
+
 ## 版本发布
 
 1. 提交修改并推送到 GitHub `main`，无需先手工创建版本标签。

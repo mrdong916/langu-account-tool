@@ -84,7 +84,7 @@ jobs:
       - run: node scripts/check-release-version.mjs
       - run: pnpm check
       - name: Build installers
-        run: pnpm exec tauri build --ci --target ${{ matrix.target }} --bundles ${{ matrix.bundles }} -- --locked
+        run: pnpm exec tauri build --verbose --ci --target ${{ matrix.target }} --bundles ${{ matrix.bundles }} -- --locked
       - uses: actions/upload-artifact@v4
         with:
           name: installers-${{ matrix.target }}
