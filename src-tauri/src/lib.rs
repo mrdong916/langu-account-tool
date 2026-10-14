@@ -41,9 +41,10 @@ pub fn run() {
                     api.prevent_close();
                     services::desktop::hide_main(window.app_handle());
                 }
-                tauri::WindowEvent::Focused(false)
-                | tauri::WindowEvent::Moved(_)
-                | tauri::WindowEvent::Resized(_) => {
+                tauri::WindowEvent::Focused(false) if !cfg!(target_os = "windows") => {
+                    services::desktop::hide_hint(window.app_handle())
+                }
+                tauri::WindowEvent::Moved(_) | tauri::WindowEvent::Resized(_) => {
                     services::desktop::hide_hint(window.app_handle())
                 }
                 _ => {}

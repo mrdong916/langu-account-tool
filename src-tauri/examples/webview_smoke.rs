@@ -369,7 +369,7 @@ async fn check(app: &AppHandle) -> AppResult<()> {
     let hint = app
         .get_webview("switch-hint")
         .ok_or_else(|| AppError::Message("Switch hint missing".into()))?;
-    expect_script(&hint, "typeof window.showAccountHint === 'function'").await?;
+    expect_script(&hint, "typeof window.prepareAccountHint === 'function'").await?;
     expect_script(
         &hint,
         "document.getElementById('name')?.textContent === '张三'",
@@ -377,6 +377,39 @@ async fn check(app: &AppHandle) -> AppResult<()> {
     .await?;
     if was_focused && !app.get_window("main").unwrap().is_focused()? {
         return Err(AppError::Message("Hint stole keyboard focus".into()));
+    }
+    if was_focused {
+        workspace::select(app, "primary".into())?;
+        workspace::select(app, "smoke-child".into())?;
+        let hint_window = app.get_webview_window("switch-hint").unwrap();
+        for _ in 0..40 {
+            if hint_window.is_visible()? {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(25)).await;
+        }
+        if !hint_window.is_visible()? {
+            return Err(AppError::Message("Switch hint did not appear".into()));
+        }
+        tokio::time::sleep(Duration::from_millis(650)).await;
+        if !hint_window.is_visible()? {
+            return Err(AppError::Message("Switch hint disappeared too soon".into()));
+        }
+        if !workspace::eval_result(
+            &hint,
+            "Number(getComputedStyle(document.getElementById('hint')).opacity) > 0.9".into(),
+        )
+        .await?
+        {
+            return Err(AppError::Message("Switch hint faded too soon".into()));
+        }
+        tokio::time::sleep(Duration::from_millis(850)).await;
+        if hint_window.is_visible()? {
+            return Err(AppError::Message("Switch hint did not expire".into()));
+        }
+        eprintln!("Switch hint duration passed");
+    } else {
+        eprintln!("Switch hint duration skipped: main window was not focused");
     }
     desktop::hide_main(app);
     if app.get_window("main").unwrap().is_visible()? {

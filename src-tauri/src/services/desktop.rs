@@ -209,7 +209,7 @@ pub fn show_hint(app: &AppHandle) {
     let generation = state.hint_generation.fetch_add(1, Ordering::SeqCst) + 1;
     let callback_app = app.clone();
     let _ = hint.eval_with_callback(
-        format!("window.showAccountHint?.({data}); true"),
+        format!("window.prepareAccountHint?.({data}); true"),
         move |_| {
             if callback_app
                 .state::<AppState>()
@@ -217,27 +217,38 @@ pub fn show_hint(app: &AppHandle) {
                 .load(Ordering::SeqCst)
                 == generation
                 && callback_app.get_window("main").is_some_and(|main| {
-                    main.is_visible().unwrap_or(false) && main.is_focused().unwrap_or(false)
+                    main.is_visible().unwrap_or(false)
+                        && (cfg!(target_os = "windows") || main.is_focused().unwrap_or(false))
                 })
             {
                 if let Some(hint) = callback_app.get_webview_window("switch-hint") {
-                    let _ = hint.show();
+                    if hint.show().is_err() {
+                        return;
+                    }
+                    let handle = callback_app.clone();
+                    if hint
+                        .eval_with_callback("window.playAccountHint?.(); true", move |_| {
+                            let handle = handle.clone();
+                            tauri::async_runtime::spawn(async move {
+                                tokio::time::sleep(std::time::Duration::from_millis(1350)).await;
+                                if handle
+                                    .state::<AppState>()
+                                    .hint_generation
+                                    .load(Ordering::SeqCst)
+                                    == generation
+                                {
+                                    if let Some(hint) = handle.get_webview_window("switch-hint") {
+                                        let _ = hint.hide();
+                                    }
+                                }
+                            });
+                        })
+                        .is_err()
+                    {
+                        hide_hint(&callback_app);
+                    }
                 }
             }
         },
     );
-    let handle = app.clone();
-    tauri::async_runtime::spawn(async move {
-        tokio::time::sleep(std::time::Duration::from_millis(1350)).await;
-        if handle
-            .state::<AppState>()
-            .hint_generation
-            .load(Ordering::SeqCst)
-            == generation
-        {
-            if let Some(hint) = handle.get_webview_window("switch-hint") {
-                let _ = hint.hide();
-            }
-        }
-    });
 }
