@@ -19,6 +19,8 @@ import {
   LogOut,
   Search,
   Minus,
+  Users,
+  Database,
 } from 'lucide-vue-next';
 import AccountAvatar from '@/components/account/AccountAvatar.vue';
 import UserSearchDialog from '@/components/account/UserSearchDialog.vue';
@@ -41,6 +43,7 @@ const address = ref('');
 const addressFocused = ref(false);
 const filter = ref('');
 const collapsed = ref(localStorage.getItem('langu-sidebar-collapsed') === 'true');
+const isMac = ref(false);
 const primaryName = computed(() => {
   const account = store.primary?.account;
   return account?.realname && account.realname !== account.username ? account.realname : '主账号';
@@ -79,11 +82,23 @@ function primaryStatus() {
 }
 const filtered = computed(() =>
   store.secondary.filter((s) =>
-    s.account?.username.toLowerCase().includes(filter.value.toLowerCase()),
+    filter.value
+      .toLowerCase()
+      .trim()
+      .split(/\s+/)
+      .every((term) =>
+        (
+          s.account?.searchText ||
+          `${s.account?.username} ${s.account?.realname} ${s.account?.department}`
+        )
+          .toLowerCase()
+          .includes(term),
+      ),
   ),
 );
 const { update } = useNativeBrowser(browserHost, visible, store.report);
 let unlisten: UnlistenFn | undefined;
+let unlistenMenu: UnlistenFn | undefined;
 let disposed = false;
 watch(
   () => store.active?.url,
@@ -99,6 +114,7 @@ watch(
   },
 );
 onMounted(async () => {
+  isMac.value = /Mac/.test(navigator.platform);
   if (isTauriRuntime()) {
     unlisten = await listen<WorkspaceSnapshot>('workspace-changed', (event) =>
       store.apply(event.payload),
@@ -107,13 +123,44 @@ onMounted(async () => {
       unlisten();
       return;
     }
+    unlistenMenu = await listen<string>(
+      'desktop-action',
+      (event) => void menuAction(event.payload),
+    );
+    if (disposed) {
+      unlistenMenu();
+      return;
+    }
   }
   await store.initialize();
 });
 onBeforeUnmount(() => {
   disposed = true;
   unlisten?.();
+  unlistenMenu?.();
 });
+async function menuAction(action: string) {
+  if (store.busy || searchOpen.value || settingsOpen.value || confirmingClose.value) return;
+  if (action === 'search') {
+    if (store.primary) await openSearch();
+  } else if (action === 'settings') await openSettings();
+  else if (action === 'refresh-directory') await store.refreshDirectory();
+  else if (action === 'close-workspace') {
+    if (store.primary) await askClose();
+  } else if (action === 'primary') {
+    if (store.primary) await store.select('primary');
+  } else if (action === 'previous' || action === 'next') {
+    const sessions = store.state.sessions;
+    if (!sessions.length) return;
+    const index = sessions.findIndex((session) => session.id === store.state.active);
+    const next = (index + (action === 'next' ? 1 : -1) + sessions.length) % sessions.length;
+    await store.select(sessions[next].id);
+  }
+}
+function startDrag(event: MouseEvent) {
+  if (event.button === 0 && isTauriRuntime())
+    void desktopCommand('drag_window').catch(store.report);
+}
 async function hideNative() {
   if (isTauriRuntime()) await resizeBrowser({ x: 0, y: 0, width: 0, height: 0 }, false);
 }
@@ -165,7 +212,59 @@ async function closeWorkspace() {
 </script>
 
 <template>
-  <div class="workspace-shell" :class="{ 'sidebar-collapsed': collapsed }">
+  <div class="workspace-shell" :class="{ 'sidebar-collapsed': collapsed, 'is-mac': isMac }">
+    <header class="native-titlebar" @mousedown="startDrag">
+      <span>兰谷多账号工具</span><small>多账号工作区</small>
+    </header>
+    <nav class="app-rail" aria-label="功能导航">
+      <button
+        class="rail-button active"
+        title="账号工作区"
+        aria-label="账号工作区"
+        @click="collapsed = !collapsed"
+      >
+        <Users :size="21" />
+      </button>
+      <button
+        class="rail-button"
+        title="搜索 / 添加账号（⌘/Ctrl+Shift+K）"
+        aria-label="搜索或添加账号"
+        :disabled="!store.primary || store.busy"
+        @click="openSearch"
+      >
+        <Search :size="21" />
+      </button>
+      <button
+        class="rail-button"
+        :title="
+          store.state.directory.error || `刷新用户缓存 · 已缓存 ${store.state.directory.count} 人`
+        "
+        aria-label="刷新用户缓存"
+        :disabled="!store.authorized || store.state.directory.syncing || store.busy"
+        @click="store.refreshDirectory"
+      >
+        <Database :size="20" :class="{ spinning: store.state.directory.syncing }" />
+      </button>
+      <span class="rail-spacer" />
+      <button
+        class="rail-button"
+        title="系统设置"
+        aria-label="系统设置"
+        :disabled="store.busy"
+        @click="openSettings"
+      >
+        <Settings2 :size="20" />
+      </button>
+      <button
+        class="rail-button"
+        title="关闭工作区"
+        aria-label="关闭工作区"
+        :disabled="!store.primary || store.busy"
+        @click="askClose"
+      >
+        <LogOut :size="20" />
+      </button>
+    </nav>
     <aside class="account-sidebar">
       <div class="sidebar-header">
         <button
@@ -236,10 +335,10 @@ async function closeWorkspace() {
               :src="session.account?.avatar"
               :username="session.account?.username"
             /><span class="account-text"
-              ><strong>{{ session.account?.username }}</strong
+              ><strong>{{ session.account?.realname || session.account?.username }}</strong
               ><small>{{
                 session.status === 'ready'
-                  ? '子账号'
+                  ? session.account?.department || '子账号'
                   : session.status === 'error'
                     ? '登录失败'
                     : session.status === 'checking'
@@ -270,26 +369,6 @@ async function closeWorkspace() {
         <div v-if="!store.secondary.length" class="sidebar-empty">暂无子账号</div>
         <div v-else-if="!filtered.length" class="sidebar-empty">没有匹配的账号</div>
       </div>
-      <footer class="sidebar-footer">
-        <button
-          class="sidebar-command"
-          title="系统设置"
-          aria-label="系统设置"
-          :disabled="store.busy"
-          @click="openSettings"
-        >
-          <Settings2 :size="18" /><span>系统设置</span>
-        </button>
-        <button
-          class="sidebar-command"
-          title="关闭工作区"
-          aria-label="关闭工作区"
-          :disabled="store.busy || !store.primary"
-          @click="askClose"
-        >
-          <LogOut :size="18" /><span>关闭工作区</span>
-        </button>
-      </footer>
     </aside>
     <main class="workspace-main">
       <div v-if="store.state.access.status === 'expired'" class="message error" role="alert">

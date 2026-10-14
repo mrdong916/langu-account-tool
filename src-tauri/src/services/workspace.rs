@@ -27,10 +27,20 @@ pub fn trusted(caller: &Webview) -> AppResult<()> {
 pub fn snapshot(app: &AppHandle) -> AppResult<Value> {
     let state = app.state::<AppState>();
     let ws = state.lock()?;
-    let mut sessions = ws.sessions.values().collect::<Vec<_>>();
+    let mut sessions = ws.sessions.values().cloned().collect::<Vec<_>>();
     sessions.sort_by_key(|session| session.created_at);
+    for session in &mut sessions {
+        if let Some(account) = &mut session.account {
+            super::directory::enrich(app, account);
+        }
+    }
+    let directory = state
+        .directory
+        .lock()
+        .map(|d| d.status.clone())
+        .unwrap_or_default();
     Ok(
-        json!({"settings": ws.settings, "sessions": sessions, "active": ws.active, "access": ws.access}),
+        json!({"settings": ws.settings, "sessions": sessions, "active": ws.active, "access": ws.access, "directory": directory}),
     )
 }
 
@@ -101,10 +111,14 @@ pub fn select(app: &AppHandle, id: String) -> AppResult<()> {
         if id != "primary" && !ws.access.ready() {
             return Err(AppError::Message("请先登录有权限的主账号".into()));
         }
+        if ws.active.as_ref() != Some(&id) {
+            ws.pending_hint = Some(id.clone());
+        }
         ws.active = Some(id);
     }
     position(app)?;
     publish(app);
+    super::desktop::show_hint(app);
     Ok(())
 }
 
@@ -327,6 +341,10 @@ pub async fn sync_primary(app: &AppHandle) -> AppResult<()> {
 }
 
 fn set_access(app: &AppHandle, status: AccessStatus, message: &str) -> AppResult<()> {
+    if status != AccessStatus::Ready {
+        super::directory::reset(app);
+        super::desktop::hide_hint(app);
+    }
     {
         let state = app.state::<AppState>();
         let mut ws = state.lock()?;
@@ -428,13 +446,16 @@ async fn check_primary(app: &AppHandle, force: bool) -> AppResult<()> {
                 return Err(error);
             }
         }
+        if app.state::<AppState>().lock()?.access.ready() {
+            super::directory::schedule(app, &config, &credential, &owner, false)?;
+        }
         return Ok(());
     }
     {
         let state = app.state::<AppState>();
         let mut ws = state.lock()?;
         ws.access.key = Some(key);
-        ws.access.owner = Some(owner);
+        ws.access.owner = Some(owner.clone());
         ws.access.checked_at = Some(std::time::Instant::now());
     }
     // Do not hide a previously authorized view while performing a routine recheck.
@@ -472,7 +493,7 @@ async fn check_primary(app: &AppHandle, force: bool) -> AppResult<()> {
         let updated = {
             let state = app.state::<AppState>();
             let mut ws = state.lock()?;
-            ws.settings.username = account.username;
+            ws.settings.username = account.username.clone();
             ws.settings.clone()
         };
         settings::save(app, &updated)?;
@@ -486,6 +507,7 @@ async fn check_primary(app: &AppHandle, force: bool) -> AppResult<()> {
             return Err(error);
         }
     }
+    super::directory::schedule(app, &config, &credential, &owner, false)?;
     Ok(())
 }
 
@@ -649,6 +671,10 @@ pub fn close(app: &AppHandle, id: &str) -> AppResult<()> {
             .then(|| "primary".into());
     }
     drop(ws);
+    if id == "primary" {
+        super::directory::reset(app);
+    }
+    super::desktop::hide_hint(app);
     position(app)?;
     publish(app);
     Ok(())
@@ -682,5 +708,11 @@ pub fn set_bounds(app: &AppHandle, bounds: Bounds, visible: bool) -> AppResult<(
         ws.bounds = bounds;
         ws.visible = visible;
     }
-    position(app)
+    position(app)?;
+    if visible {
+        super::desktop::show_hint(app);
+    } else {
+        super::desktop::hide_hint(app);
+    }
+    Ok(())
 }

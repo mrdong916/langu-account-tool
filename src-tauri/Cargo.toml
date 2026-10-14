@@ -23,7 +23,9 @@ required-features = ["custom-protocol"]
 [dependencies]
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-tauri = { version = "=2.12.3", features = ["unstable", "devtools"] }
+tauri = { version = "=2.12.3", features = ["unstable", "devtools", "tray-icon", "macos-private-api"] }
+rusqlite = { version = "0.37", features = ["bundled"] }
+pinyin = "0.10"
 thiserror = "2"
 tokio = { version = "1", features = ["sync", "time"] }
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }

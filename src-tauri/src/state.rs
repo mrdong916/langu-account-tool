@@ -18,12 +18,16 @@ pub struct Workspace {
     pub active: Option<String>,
     pub visible: bool,
     pub bounds: Bounds,
+    pub pending_hint: Option<String>,
 }
 
 #[derive(Default)]
 pub struct AppState {
     pub workspace: Mutex<Workspace>,
     pub operations: tokio::sync::Mutex<()>,
+    pub directory: Mutex<crate::services::directory::DirectoryState>,
+    pub hint_generation: std::sync::atomic::AtomicU64,
+    pub hint_ready: std::sync::atomic::AtomicBool,
 }
 
 impl AppState {

@@ -79,23 +79,39 @@ pub async fn sync_sessions(
 pub async fn search_users(
     caller: Webview,
     app: AppHandle,
-    state: State<'_, AppState>,
     keyword: String,
     page: u32,
 ) -> AppResult<UserPage> {
     service::trusted(&caller)?;
+    crate::services::directory::search(&app, &keyword, page)
+}
+
+#[tauri::command]
+pub async fn refresh_directory(
+    caller: Webview,
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> AppResult<()> {
+    service::trusted(&caller)?;
     let _guard = state.operations.lock().await;
-    if keyword.len() > 200 {
-        return Err(AppError::Message("检索内容过长".into()));
-    }
-    let config = state.lock()?.settings.clone();
     let credential = service::authorized_primary(&app).await?;
-    let result = langu::search(&config, &credential, keyword, page).await;
-    service::ensure_primary(&app, &credential).await?;
-    if let Err(error) = &result {
-        service::handle_primary_error(&app, error).await?;
-    }
-    result
+    let (config, owner) = {
+        let ws = state.lock()?;
+        (
+            ws.settings.clone(),
+            ws.access.owner.clone().ok_or(AppError::Unauthorized)?,
+        )
+    };
+    crate::services::directory::schedule(&app, &config, &credential, &owner, true)
+}
+
+#[tauri::command]
+pub async fn drag_window(caller: Webview, app: AppHandle) -> AppResult<()> {
+    service::trusted(&caller)?;
+    app.get_window("main")
+        .ok_or_else(|| AppError::Message("主窗口不可用".into()))?
+        .start_dragging()?;
+    Ok(())
 }
 
 #[tauri::command]

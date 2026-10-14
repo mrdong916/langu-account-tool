@@ -3,11 +3,156 @@ use langu_account_tool_lib::{
     domain::workspace::{Bounds, Settings},
     error::{AppError, AppResult},
     infra::langu,
-    services::workspace,
+    services::{desktop, directory, workspace},
     state::AppState,
 };
 use std::time::Duration;
 use tauri::{AppHandle, Manager, Webview};
+
+async fn wait_directory(app: &AppHandle, count: usize) -> AppResult<()> {
+    for _ in 0..100 {
+        let status = app
+            .state::<AppState>()
+            .directory
+            .lock()
+            .unwrap()
+            .status
+            .clone();
+        if !status.syncing && status.last_sync.is_some() {
+            if status.count != count || !status.error.is_empty() {
+                return Err(AppError::Message(format!(
+                    "Directory count/error mismatch: {}/{count}: {}",
+                    status.count, status.error
+                )));
+            }
+            return Ok(());
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+    Err(AppError::Message(
+        "Directory synchronization timed out".into(),
+    ))
+}
+
+async fn fixture(path: &str, body: serde_json::Value) -> AppResult<()> {
+    reqwest::Client::new()
+        .post(format!("http://127.0.0.1:1432/fixture/{path}"))
+        .json(&body)
+        .send()
+        .await
+        .map_err(|_| AppError::Message("Fixture request failed".into()))?
+        .error_for_status()
+        .map_err(|_| AppError::Message("Fixture response failed".into()))?;
+    Ok(())
+}
+
+async fn check_directory(app: &AppHandle) -> AppResult<()> {
+    wait_directory(app, 245).await?;
+    for query in ["zhangsan", "zs", "财务 张", "a1000"] {
+        let result = directory::search(app, query, 1)?;
+        if result.total != 1 || result.records[0].department != "财务部" {
+            return Err(AppError::Message(format!("Local search failed: {query}")));
+        }
+    }
+    let first = app
+        .state::<AppState>()
+        .directory
+        .lock()
+        .unwrap()
+        .status
+        .clone();
+    let now = chrono::Utc::now()
+        .with_timezone(&chrono::FixedOffset::east_opt(8 * 3600).unwrap())
+        .format("%Y-%m-%d %H:%M:%S")
+        .to_string();
+    fixture(
+        "users",
+        serde_json::json!({"id":"fixture-1", "realDepart_dictText":"研发部", "updateTime":now}),
+    )
+    .await?;
+    fixture("users", serde_json::json!({"id":"fixture-new", "username":"test.new", "realname":"李四", "realDepart_dictText":"研发部", "createTime":now})).await?;
+    directory::reset(app); // Simulate a new process loading the persisted owner partition.
+    workspace::sync_primary(app).await?;
+    wait_directory(app, 246).await?;
+    if directory::search(app, "研发 张", 1)?.total != 1
+        || directory::search(app, "lisi", 1)?.total != 1
+    {
+        return Err(AppError::Message(
+            "Incremental create/update query failed".into(),
+        ));
+    }
+    if app
+        .state::<AppState>()
+        .directory
+        .lock()
+        .unwrap()
+        .status
+        .last_full_sync
+        != first.last_full_sync
+    {
+        return Err(AppError::Message(
+            "Restart should sync incrementally".into(),
+        ));
+    }
+    fixture(
+        "users",
+        serde_json::json!({"id":"fixture-new", "remove":true}),
+    )
+    .await?;
+    let before_failure = app
+        .state::<AppState>()
+        .directory
+        .lock()
+        .unwrap()
+        .status
+        .last_sync;
+    fixture("directory", serde_json::json!({"failPage":2})).await?;
+    langu_account_tool_lib::commands::workspace::refresh_directory(
+        app.get_webview("main").unwrap(),
+        app.clone(),
+        app.state(),
+    )
+    .await?;
+    for _ in 0..100 {
+        if !app
+            .state::<AppState>()
+            .directory
+            .lock()
+            .unwrap()
+            .status
+            .syncing
+        {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+    let failed = app
+        .state::<AppState>()
+        .directory
+        .lock()
+        .unwrap()
+        .status
+        .clone();
+    if failed.error.is_empty() || failed.last_sync != before_failure || failed.count != 246 {
+        return Err(AppError::Message(
+            "Failed sync replaced cached snapshot or cursor".into(),
+        ));
+    }
+    fixture("directory", serde_json::json!({"failPage":0})).await?;
+    langu_account_tool_lib::commands::workspace::refresh_directory(
+        app.get_webview("main").unwrap(),
+        app.clone(),
+        app.state(),
+    )
+    .await?;
+    wait_directory(app, 245).await?;
+    if directory::search(app, "test.new", 1)?.total != 0 {
+        return Err(AppError::Message(
+            "Full sync did not prune deleted user".into(),
+        ));
+    }
+    Ok(())
+}
 
 async fn expect_script(view: &Webview, script: &str) -> AppResult<()> {
     for _ in 0..10 {
@@ -68,6 +213,20 @@ async fn check(app: &AppHandle) -> AppResult<()> {
         ));
     }
     let mode = std::env::var("LANGU_SMOKE_MODE").unwrap_or_else(|_| "local".into());
+    let _ = std::fs::remove_file(
+        app.path()
+            .app_local_data_dir()?
+            .join("directory/users.sqlite3"),
+    );
+    if mode == "local" {
+        fixture("users", serde_json::json!({"id":"fixture-1", "realDepart_dictText":"财务部", "updateTime":"2026-01-01 00:00:00"})).await?;
+        fixture(
+            "users",
+            serde_json::json!({"id":"fixture-new", "remove":true}),
+        )
+        .await?;
+        fixture("directory", serde_json::json!({"failPage":0})).await?;
+    }
     let config = Settings {
         login_url: match mode.as_str() {
             "local" => "http://127.0.0.1:1432/",
@@ -116,6 +275,7 @@ async fn check(app: &AppHandle) -> AppResult<()> {
     #[cfg(target_os = "macos")]
     check_bounds(app, &primary).await?;
     workspace::sync_primary(app).await?;
+    check_directory(app).await?;
     let credential = workspace::authorized_primary(app).await?;
     let payload = langu::impersonate(&config, &credential, "test.user.01".into()).await?;
     workspace::create(
@@ -143,11 +303,32 @@ async fn check(app: &AppHandle) -> AppResult<()> {
         "localStorage.getItem('draft') === 'PRIMARY-DRAFT'",
     )
     .await?;
+    desktop::show_main(app);
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    let was_focused = app.get_window("main").unwrap().is_focused()?;
     workspace::select(app, "smoke-child".into())?;
     workspace::sync_active(app).await?;
     if app.state::<AppState>().lock()?.sessions["smoke-child"].status != "ready" {
         return Err(AppError::Message("Child login not ready".into()));
     }
+    expect_script(&child, "localStorage.getItem('draft') === 'CHILD-DRAFT'").await?;
+    let hint = app
+        .get_webview("switch-hint")
+        .ok_or_else(|| AppError::Message("Switch hint missing".into()))?;
+    expect_script(&hint, "typeof window.showAccountHint === 'function'").await?;
+    expect_script(
+        &hint,
+        "document.getElementById('name')?.textContent === '张三'",
+    )
+    .await?;
+    if was_focused && !app.get_window("main").unwrap().is_focused()? {
+        return Err(AppError::Message("Hint stole keyboard focus".into()));
+    }
+    desktop::hide_main(app);
+    if app.get_window("main").unwrap().is_visible()? {
+        return Err(AppError::Message("Window did not hide".into()));
+    }
+    desktop::show_main(app);
     expect_script(&child, "localStorage.getItem('draft') === 'CHILD-DRAFT'").await?;
     let main_auth = workspace::read_auth(app, "primary").await?;
     let child_auth = workspace::read_auth(app, "smoke-child").await?;
@@ -197,6 +378,7 @@ fn main() {
     tauri::Builder::default()
         .manage(AppState::default())
         .setup(|app| {
+            desktop::setup(app)?;
             let handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
                 let result = check(&handle).await;

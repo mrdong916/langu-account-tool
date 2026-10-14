@@ -3,13 +3,16 @@ import { defineStore } from 'pinia';
 import {
   desktopCommand,
   defaultSettings,
+  emptyDirectory,
   initializeWorkspace,
   saveSettings,
 } from '@/api/workspace';
 import type { Settings, WorkspaceSnapshot } from '@/types/workspace';
+import { isTauriRuntime } from '@/services/tauri';
 
 export const useWorkspaceStore = defineStore('workspace', () => {
   const state = ref<WorkspaceSnapshot>({
+    directory: { ...emptyDirectory },
     settings: { ...defaultSettings },
     sessions: [],
     active: null,
@@ -23,7 +26,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
   const secondary = computed(() => state.value.sessions.filter((s) => s.role === 'secondary'));
   const authorized = computed(() => state.value.access.status === 'ready');
   const apply = (snapshot: WorkspaceSnapshot) => {
-    state.value = snapshot;
+    state.value = { ...snapshot, directory: snapshot.directory ?? { ...emptyDirectory } };
   };
   const report = (reason: unknown) => {
     error.value = reason instanceof Error ? reason.message : String(reason);
@@ -46,6 +49,14 @@ export const useWorkspaceStore = defineStore('workspace', () => {
   async function initialize() {
     await run(async () => {
       apply(await initializeWorkspace());
+      if (
+        isTauriRuntime() &&
+        state.value.settings.remember &&
+        state.value.settings.username &&
+        !primary.value
+      ) {
+        await desktopCommand('open_primary');
+      }
     });
   }
   async function save(config: Settings, open = false) {
@@ -57,6 +68,10 @@ export const useWorkspaceStore = defineStore('workspace', () => {
   }
   async function select(id: string) {
     await run(() => desktopCommand('select_session', { id }));
+  }
+  async function refreshDirectory() {
+    if (state.value.directory.syncing) return;
+    await run(() => desktopCommand('refresh_directory'));
   }
   async function browser(action: string, value?: string) {
     if (!active.value) return;
@@ -77,6 +92,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     initialize,
     save,
     select,
+    refreshDirectory,
     browser,
   };
 });

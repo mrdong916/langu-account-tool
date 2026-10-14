@@ -29,7 +29,9 @@ pnpm dev
 5. 左侧主账号与子账号分组显示，点击切换，页面状态保留。
 6. 关闭工作区可以保留主账号登录状态，或勾选清除本地登录状态。
 7. 主账号过期后回到登录页并锁定子账号；子账号过期可点击其左侧重登入口恢复。
-8. 侧栏可折叠为 68px，底部提供设置和关闭工作区，开发工具位于首页图标之后。
+8. 左侧功能栏提供搜索、刷新用户缓存、设置和关闭工作区；账号侧栏可折叠。切换账号显示透明大字提示。
+9. 主账号登录后后台缓存可见用户，重启增量同步，手动刷新全量校准。支持姓名、工号、部门、拼音全拼和首字母即时检索。
+10. 关闭窗口只隐藏到托盘；从应用菜单或托盘选择“退出”才结束程序。
 
 ## 目录
 
@@ -67,7 +69,7 @@ langu-account-tool/
 ```
 
 遵循国内 Vue 管理端项目常见模块化目录，并为 Rust 原生能力单独分层。
-尚未加入无业务依据的数据库、自动升级或额外系统插件。
+用户目录通过 Rust + SQLite 缓存，登录凭据不会进入用户目录数据库。
 
 ## 验证与打包
 
@@ -79,6 +81,7 @@ pnpm build
 ```
 
 平台范围见 [docs/platforms.md](docs/platforms.md)，接入协议见 [docs/api.md](docs/api.md)。
+各平台调试、Intel/ARM 打包命令及系统依赖见 [docs/development.md](docs/development.md)。
 
 ## GitHub 自动构建与发布
 
@@ -86,7 +89,7 @@ pnpm build
 
 - Windows x64 / x86：`.exe`（NSIS）和 `.msi`；ARM64：`.exe`。
 - Linux x64 / ARM64：`.deb`、`.rpm` 和 `.AppImage`。
-- macOS 14+：同时支持 Intel 和 Apple Silicon 的通用 `.dmg`。
+- macOS 14+：Intel 和 Apple Silicon 分别提供 `.dmg`。
 
 检查由可复用的 `check.yml` 执行；构建矩阵和下载说明见 [docs/release.md](docs/release.md)。
 全部平台检查和构建成功后才统一发布；上传阶段使用草稿，安装包上传成功后自动公开，无需手工确认。

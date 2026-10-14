@@ -3,13 +3,15 @@ import { createHash } from 'node:crypto';
 
 // Explicit local fixture. Never enabled or bundled in the application.
 const port = Number(process.env.LANGU_FIXTURE_PORT ?? 1431);
-const users = Array.from({ length: 45 }, (_, i) => ({ id: `fixture-${i + 1}`, username: `test.user.${String(i + 1).padStart(2, '0')}`, realname: `Test ${i + 1}`, orgCodeTxt: 'Local fixture', avatar: '' }));
+const fixtureTime = '2026-01-01 00:00:00';
+const users = Array.from({ length: 245 }, (_, i) => ({ id: `fixture-${i + 1}`, username: `test.user.${String(i + 1).padStart(2, '0')}`, realname: i === 0 ? '张三' : `测试用户${i + 1}`, orgCodeTxt: '权限部门', realDepart: 'A01', realDepart_dictText: '财务部', workNo: `A${1000 + i}`, status: 1, createTime: fixtureTime, updateTime: fixtureTime, avatar: '' }));
 const main = { id: 'fixture-main', username: 'test.admin', avatar: '' };
 const secret = 'dd05f1c54d63749eda95f9fa6d49v442a';
 const tokens = new Map([['fixture-main-token', 'test.admin']]);
 const revoked = new Set();
 let permitted = true;
 let issued = 0;
+let failDirectoryPage = 0;
 const requests = [];
 const server = createServer(async (req, res) => {
   const url = new URL(req.url, `http://127.0.0.1:${port}`);
@@ -22,8 +24,15 @@ const server = createServer(async (req, res) => {
     try { body = JSON.parse(Buffer.concat(chunks).toString() || '{}'); }
     catch { return json({ success: false }, 400); }
     if (url.pathname === '/fixture/permission') permitted = body.allowed === true;
+    if (url.pathname === '/fixture/directory') failDirectoryPage = Number(body.failPage || 0);
     if (url.pathname === '/fixture/expire') {
       for (const [token, username] of tokens) if (username === body.username) revoked.add(token);
+    }
+    if (url.pathname === '/fixture/users') {
+      const index = users.findIndex(user => user.id === body.id);
+      if (body.remove && index >= 0) users.splice(index, 1);
+      else if (index >= 0) Object.assign(users[index], body);
+      else if (body.id && body.username) users.push(body);
     }
     if (url.pathname === '/fixture/login') {
       const token = `fixture-main-${++issued}`;
@@ -42,6 +51,7 @@ const server = createServer(async (req, res) => {
     for await (const chunk of req) chunks.push(chunk);
     const params = req.method === 'POST' ? JSON.parse(Buffer.concat(chunks).toString()) : Object.fromEntries([...url.searchParams].filter(([key]) => key !== '_t'));
     const sorted = Object.fromEntries(Object.keys(params).sort().map(key => [key, String(params[key])]));
+    requests[requests.length - 1].params = sorted;
     const sign = createHash('md5').update(JSON.stringify(sorted) + secret).digest('hex').toUpperCase();
     if (sign !== req.headers['x-sign'] || !/^\d{14}$/.test(req.headers['x-timestamp'] ?? '')) return json({ success: false, message: 'Invalid signature' }, 403);
     if (url.pathname === '/sys/sysConfig/getByCode') return json({ success: true, result: { code: params.code, value: 'fixture' } });
@@ -52,10 +62,15 @@ const server = createServer(async (req, res) => {
     }
     if (!permitted) return json({ success: false }, 403);
     if (url.pathname === '/sys/user/list') {
+      if (Number(params.pageNo) === failDirectoryPage) return json({ success: false, message: 'Fixture directory page failure' }, 503);
       const query = (params.username ?? '').replaceAll('*', '');
-      const matches = users.filter(user => user.username.includes(query));
+      const matches = users.filter(user => user.username.includes(query) && ['createTime', 'updateTime'].every(field =>
+        (!params[`${field}_begin`] || user[field] >= params[`${field}_begin`]) && (!params[`${field}_end`] || user[field] <= params[`${field}_end`])));
+      const columns = (params.column || 'id').split(',');
+      matches.sort((a, b) => { for (const field of columns) { const order = String(a[field] ?? '').localeCompare(String(b[field] ?? '')); if (order) return params.order === 'desc' ? -order : order; } return 0; });
       const page = Number(params.pageNo ?? 1);
-      return json({ success: true, result: { records: matches.slice((page - 1) * 20, page * 20), total: matches.length } });
+      const size = Number(params.pageSize ?? 20);
+      return json({ success: true, result: { records: matches.slice((page - 1) * size, page * size), total: matches.length } });
     }
     if (url.pathname === '/sys/internalLoginByAdmin') {
       const userInfo = users.find(user => user.username === params.username);

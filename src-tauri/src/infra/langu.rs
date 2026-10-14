@@ -119,7 +119,7 @@ pub fn account(value: &Value, settings: &Settings) -> AppResult<Account> {
             avatar.trim_start_matches('/')
         )
     };
-    Ok(Account {
+    let mut user = Account {
         id: value["id"]
             .as_str()
             .map(str::to_owned)
@@ -127,7 +127,103 @@ pub fn account(value: &Value, settings: &Settings) -> AppResult<Account> {
         username: username.into(),
         avatar,
         realname: value["realname"].as_str().unwrap_or_default().into(),
-        department: value["orgCodeTxt"].as_str().unwrap_or_default().into(),
+        department: value["realDepart_dictText"]
+            .as_str()
+            .unwrap_or_default()
+            .into(),
+        department_code: value["realDepart"].as_str().unwrap_or_default().into(),
+        work_no: value["workNo"].as_str().unwrap_or_default().into(),
+        status: value["status"]
+            .as_str()
+            .map(str::to_owned)
+            .unwrap_or_else(|| {
+                value["status"]
+                    .as_i64()
+                    .map(|v| v.to_string())
+                    .unwrap_or_default()
+            }),
+        search_text: String::new(),
+    };
+    crate::domain::directory::index(&mut user);
+    Ok(user)
+}
+
+// A server clock is required for sync cursors; a local-clock fallback can skip changes.
+pub async fn server_millis(settings: &Settings) -> AppResult<i64> {
+    let response = Client::builder()
+        .timeout(Duration::from_secs(10))
+        .redirect(Policy::none())
+        .build()
+        .map_err(|_| AppError::Message("无法初始化接口客户端".into()))?
+        .get(format!(
+            "{}/sys/common/getServerTimestamp",
+            settings.api_base_url
+        ))
+        .send()
+        .await
+        .map_err(|_| AppError::Message("获取服务器时间失败，请重试同步".into()))?;
+    if !response.status().is_success() {
+        return Err(AppError::Message("服务器时间接口异常".into()));
+    }
+    let body: Value = response
+        .json()
+        .await
+        .map_err(|_| AppError::Message("服务器时间格式异常".into()))?;
+    body["result"]
+        .as_i64()
+        .filter(|v| *v > 0 && body["success"] == true)
+        .ok_or_else(|| AppError::Message("服务器时间格式异常".into()))
+}
+
+pub fn directory_params(page: u32, range: Option<(&str, i64, i64)>) -> BTreeMap<String, String> {
+    let mut params = BTreeMap::from([
+        ("column".into(), "id".into()),
+        ("order".into(), "asc".into()),
+        ("pageNo".into(), page.to_string()),
+        ("pageSize".into(), "200".into()),
+    ]);
+    if let Some((field, since, until)) = range {
+        params.insert("column".into(), format!("{field},id"));
+        for (suffix, millis) in [("begin", since), ("end", until)] {
+            let time = chrono::DateTime::from_timestamp_millis(millis)
+                .unwrap_or_default()
+                .with_timezone(&FixedOffset::east_opt(8 * 3600).unwrap())
+                .format("%Y-%m-%d %H:%M:%S")
+                .to_string();
+            params.insert(format!("{field}_{suffix}"), time);
+        }
+    }
+    params
+}
+
+pub async fn directory_page(
+    settings: &Settings,
+    credential: &Credential,
+    page: u32,
+    range: Option<(&str, i64, i64)>,
+) -> AppResult<UserPage> {
+    let result = request(
+        settings,
+        credential,
+        "/sys/user/list",
+        directory_params(page, range),
+        false,
+    )
+    .await?;
+    let records = result["records"]
+        .as_array()
+        .ok_or_else(|| AppError::Message("用户列表缺少 records".into()))?
+        .iter()
+        .map(|v| account(v, settings))
+        .collect::<AppResult<Vec<_>>>()?;
+    let total = result["total"]
+        .as_u64()
+        .ok_or_else(|| AppError::Message("用户列表缺少 total".into()))?;
+    Ok(UserPage {
+        records,
+        total,
+        page,
+        page_size: 200,
     })
 }
 
@@ -217,36 +313,6 @@ async fn request(
     Ok(body["result"].clone())
 }
 
-pub async fn search(
-    settings: &Settings,
-    credential: &Credential,
-    keyword: String,
-    page: u32,
-) -> AppResult<UserPage> {
-    let mut params = BTreeMap::from([
-        ("column".into(), "createTime".into()),
-        ("order".into(), "desc".into()),
-        ("pageNo".into(), page.max(1).to_string()),
-        ("pageSize".into(), "20".into()),
-    ]);
-    if !keyword.trim().is_empty() {
-        params.insert("username".into(), format!("*{}*", keyword.trim()));
-    }
-    let result = request(settings, credential, "/sys/user/list", params, false).await?;
-    let records = result["records"]
-        .as_array()
-        .ok_or_else(|| AppError::Message("用户列表缺少 records".into()))?
-        .iter()
-        .map(|v| account(v, settings))
-        .collect::<AppResult<Vec<_>>>()?;
-    Ok(UserPage {
-        records,
-        total: result["total"].as_u64().unwrap_or(0),
-        page: page.max(1),
-        page_size: 20,
-    })
-}
-
 pub async fn impersonate(
     settings: &Settings,
     credential: &Credential,
@@ -274,6 +340,20 @@ pub async fn impersonate(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn directory_projects_only_public_identity_and_uses_actual_department() {
+        let user = account(&json!({"id":"1", "username":"zs", "realname":"张三", "workNo":"A1000", "orgCodeTxt":"权限部门", "realDepart":"A01", "realDepart_dictText":"财务部", "password":"private", "token":"private"}), &Settings::default()).unwrap();
+        let value = serde_json::to_value(&user).unwrap();
+        assert_eq!(user.department, "财务部");
+        assert_eq!(user.work_no, "A1000");
+        assert!(user.search_text.contains("zhangsan"));
+        assert!(!value.to_string().contains("private"));
+        let params = directory_params(2, Some(("updateTime", 0, 1000)));
+        assert_eq!(params["column"], "updateTime,id");
+        assert_eq!(params["updateTime_begin"], "1970-01-01 08:00:00");
+        assert_eq!(params["updateTime_end"], "1970-01-01 08:00:01");
+        assert_eq!(params["pageNo"], "2");
+    }
     fn mock_api(
         status: u16,
         body: Value,

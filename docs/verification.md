@@ -114,3 +114,13 @@ LANGU_SMOKE_MODE=remote 'work/WebView Smoke.app/Contents/MacOS/webview_smoke'
 - 未验证 macOS/Linux、Windows x86/ARM64 的运行与隔离，参见 platforms.md。
 - 未验证原站所有上传下载、弹出窗口、扫码登录、复杂重定向和内存压力场景。
 - 账号数无业务限制，但没有做高并发会话容量测试。
+# 2026-10-14 工作区优化验收
+
+- TypeScript、ESLint、11 项 Node 测试、前端生产构建、Rust 格式、10 项 Rust 测试、Clippy 通过。
+- 原生 macOS 独立 smoke profile 使用 245 个本地用户完成多页全量同步，验证中文姓名、全拼、首字母、工号和部门组合检索。
+- 模拟重新加载缓存后，以创建时间和更新时间分别拉取新增/修改；新用户没有 updateTime 也能出现。手动全量校准移除删除用户。
+- 第二页故意返回 503，确认旧快照人数和同步游标不变，重试成功后再提交。
+- 主子账号独立草稿、子账号退出不重放凭据、重新登录回原 profile、macOS 标题栏与原生子 WebView 边界回归通过。
+- 透明提示页在原生应用中显示目标姓名，未抢占主窗口焦点；隐藏/显示窗口后子账号草稿保留。
+- `pnpm dev:attached` 实际启动独立开发 profile；`pnpm build:mac:arm64 --debug --ci` 生成中文 DMG，并复制到 `work/installers/aarch64-apple-darwin/debug/`。
+- Windows/Linux 的命令映射和错误宿主检查通过自动测试；本机不能验证其安装器与原生运行效果，需相应平台或 GitHub Actions 验证。线上用户目录契约未使用真实账号联调。

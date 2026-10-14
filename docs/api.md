@@ -7,7 +7,7 @@
 
 - 登录页：http://languwin.com/
 - API：http://api.languwin.com
-- 用户搜索：GET /sys/user/list
+- 用户目录同步：GET /sys/user/list；即时检索在本地目录执行
 - 代登录：POST /sys/internalLoginByAdmin，JSON body 为 `{ "username": "目标用户名" }`
 - 可选服务器时间：GET /sys/common/getServerTimestamp
 - 主账号权限：GET /sys/permission/getUserPermissionByToken；只检查 result.auth[].action 是否精确匹配 system:internalLoginByAdmin，并排除 type=2 的禁用项，绝不从 allAuth 授权。
@@ -25,9 +25,10 @@
 4. 搜索/代登录/权限请求的 X-Access-Token 始终读取主账号 profile；tenant-id 读取其租户，缺省为 0。子账号有效性探测仅使用其自身 token 调用保活接口，不可调用管理接口。
 5. GET 的 `_t` 由原站 Axios 拦截器在签名后添加，故不参与签名。
 
-服务器时间接口失败时使用本机时间。HTTP 请求超时、401、403 和业务失败单独反馈。
-搜索参数为 username=`*关键词*`、column=createTime、order=desc、pageNo、pageSize=20。
-空关键词加载第一页，分页遍历用户；服务端权限仍然决定可检索范围。
+请求签名在服务器时间接口失败时使用本机时间；目录同步游标必须取得服务器时间，失败时保留旧游标。HTTP 请求超时、401、403 和业务失败单独反馈。
+目录首次与全量校准使用 column=id、order=asc、pageNo、pageSize=200。启动增量分别查询 createTime_begin/end 和 updateTime_begin/end，按对应时间字段与 id 升序，范围使用服务器时钟和两分钟重叠。
+服务端权限决定目录范围；完整同步后事务提交。检测到分页重复、数量变化或接口失败时保留旧快照，稍后重试。普通列表没有删除变化流，手动或每日全量校准处理删除与部门字典变动。
+本地 search_users 返回每页 20 条展示字段，支持姓名、账号、工号、实际部门、拼音和多关键词。实际部门使用 realDepart_dictText，orgCodeTxt 为权限部门。
 
 ## 响应契约
 
@@ -79,6 +80,7 @@
 workspace_init、save_settings、open_primary、sync_sessions、search_users、add_account、
 select_session、browser_bounds、browser_action、close_session、close_workspace。
 权限/恢复命令：check_primary_access、relogin_primary、relogin_session。
+缓存/窗口命令：refresh_directory、drag_window。
 每个命令校验 main 来源；跨窗口显示信息通过仅发给 main 的 workspace-changed 事件同步。
 settings 不接受 token 字段，搜索/代登录也不接受由 Vue 提交的管理 token。
 

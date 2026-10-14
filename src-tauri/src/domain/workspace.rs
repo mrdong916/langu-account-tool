@@ -69,6 +69,14 @@ pub struct Account {
     pub realname: String,
     #[serde(default)]
     pub department: String,
+    #[serde(default)]
+    pub department_code: String,
+    #[serde(default)]
+    pub work_no: String,
+    #[serde(default)]
+    pub status: String,
+    #[serde(default)]
+    pub search_text: String,
 }
 
 #[derive(Clone, Serialize)]

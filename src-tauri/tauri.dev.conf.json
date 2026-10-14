@@ -1,0 +1,15 @@
+{
+  "identifier": "com.langu.accounttool.dev",
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "兰谷多账号工具 · 开发",
+        "width": 1360,
+        "height": 900,
+        "minWidth": 760,
+        "minHeight": 640
+      }
+    ]
+  }
+}

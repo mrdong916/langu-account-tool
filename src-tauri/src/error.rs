@@ -17,6 +17,8 @@ pub enum AppError {
     Io(#[from] std::io::Error),
     #[error("数据格式错误: {0}")]
     Json(#[from] serde_json::Error),
+    #[error("本地用户缓存操作失败: {0}")]
+    Database(#[from] rusqlite::Error),
 }
 
 impl Serialize for AppError {

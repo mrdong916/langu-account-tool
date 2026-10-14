@@ -11,6 +11,10 @@ export interface Account {
   avatar: string;
   realname: string;
   department: string;
+  departmentCode: string;
+  workNo: string;
+  status: string;
+  searchText: string;
 }
 export interface Session {
   id: string;
@@ -23,6 +27,7 @@ export interface Session {
   zoom: number;
 }
 export interface WorkspaceSnapshot {
+  directory: DirectoryStatus;
   settings: Settings;
   sessions: Session[];
   active: string | null;
@@ -30,6 +35,15 @@ export interface WorkspaceSnapshot {
     status: 'pending' | 'checking' | 'ready' | 'denied' | 'expired' | 'unavailable';
     message: string;
   };
+}
+export interface DirectoryStatus {
+  syncing: boolean;
+  count: number;
+  fetched: number;
+  total: number;
+  lastSync: number | null;
+  lastFullSync: number | null;
+  error: string;
 }
 export interface UserPage {
   records: Account[];

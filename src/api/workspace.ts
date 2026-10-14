@@ -8,11 +8,21 @@ export const defaultSettings: Settings = {
   remember: true,
   username: '',
 };
+export const emptyDirectory = {
+  syncing: false,
+  count: 0,
+  fetched: 0,
+  total: 0,
+  lastSync: null,
+  lastFullSync: null,
+  error: '',
+};
 
 export async function initializeWorkspace(): Promise<WorkspaceSnapshot> {
   if (isTauriRuntime()) return invokeCommand('workspace_init');
   const saved = localStorage.getItem('langu-preview-settings');
   return {
+    directory: { ...emptyDirectory },
     settings: saved ? { ...defaultSettings, ...JSON.parse(saved) } : { ...defaultSettings },
     sessions: [],
     active: null,
