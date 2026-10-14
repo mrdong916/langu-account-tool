@@ -1,24 +1,24 @@
 # 本地调试与打包
 
-需要 Node.js 22.13+、package.json 指定版本的 pnpm、Rust stable。
-执行 `pnpm install --frozen-lockfile` 后使用以下命令。
+需要 Node.js 22.13+、Node 自带的 npm、Rust stable。
+执行 `npm install` 后使用以下命令。
 使用 nvm 时先执行 `nvm use`；本项目的 `.nvmrc` 指定 Node 22。
 
-命名沿用 nacos-control-panel；**本地运行只需要 `pnpm tauri:dev`**，自动启动前端和桌面窗口。
+命名沿用 nacos-control-panel；**本地运行只需要 `npm run tauri:dev`**，自动启动前端和桌面窗口。
 也可以在 IDE 的 package.json 脚本列表里点击 `tauri:dev` 运行。
 
 | 用途 | 命令 |
 | --- | --- |
-| 桌面调试（所有系统） | `pnpm tauri:dev` |
-| 仅预览前端 | `pnpm start` |
-| 当前系统、当前架构安装包 | `pnpm tauri:build` |
-| Mac 当前架构 | `pnpm tauri:build:mac` |
-| Mac ARM / Intel / Universal | `pnpm tauri:build:mac:arm` / `pnpm tauri:build:mac:intel` / `pnpm tauri:build:mac:universal` |
-| Windows x64 / x86 / ARM64 | `pnpm tauri:build:win` / `pnpm tauri:build:win:x86` / `pnpm tauri:build:win:arm` |
-| Linux 当前架构 / x64 / ARM64 | `pnpm tauri:build:linux` / `pnpm tauri:build:linux:x64` / `pnpm tauri:build:linux:arm` |
+| 桌面调试（所有系统） | `npm run tauri:dev` |
+| 仅预览前端 | `npm start` |
+| 当前系统、当前架构安装包 | `npm run tauri:build` |
+| Mac 当前架构 | `npm run tauri:build:mac` |
+| Mac ARM / Intel / Universal | `npm run tauri:build:mac:arm` / `npm run tauri:build:mac:intel` / `npm run tauri:build:mac:universal` |
+| Windows x64 / x86 / ARM64 | `npm run tauri:build:win` / `npm run tauri:build:win:x86` / `npm run tauri:build:win:arm` |
+| Linux 当前架构 / x64 / ARM64 | `npm run tauri:build:linux` / `npm run tauri:build:linux:x64` / `npm run tauri:build:linux:arm` |
 
-仅当前端已单独启动时，使用 `pnpm tauri:dev:attached`。
-`pnpm dev` 和 `pnpm build` 保留为兼容入口，分别调用 `tauri:dev` 和 `tauri:build`。
+仅当前端已单独启动时，使用 `npm run tauri:dev:attached`。
+`npm run dev` 和 `npm run build` 保留为兼容入口，分别调用 `tauri:dev` 和 `tauri:build`。
 
 开发模式标识为 `com.langu.accounttool.dev`，设置、用户缓存和 WebView profile 与正式版本分离。前端修改热更新，Rust 修改重新编译。
 账号页面工具栏的扳手打开该账号 WebView 的开发者工具。
@@ -26,7 +26,7 @@
 构建结果会复制到 `work/installers/<Rust目标>/release/`，文件名使用“兰谷多账号工具”。
 Mac 输出 APP 和 DMG；中文名称 DMG 会同时复制到归档目录。
 原始 Tauri 产物位于 `src-tauri/target/<Rust目标>/release/bundle/`。
-可加 `--debug` 生成包含调试信息的安装包，对应目录为 `debug`；例如 `pnpm tauri:build:mac:arm --debug --ci`。
+可加 `--debug` 生成包含调试信息的安装包，对应目录为 `debug`；例如 `npm run tauri:build:mac:arm -- --debug --ci`。
 可加 `--dry-run` 只检查当前平台并显示命令。
 
 ## 系统依赖与架构
@@ -40,12 +40,12 @@ macOS、Windows、Linux 安装包需要在对应操作系统构建；脚本会�
 
 ## 本地虚拟账号回归
 
-`pnpm test:system` 启动本地系统（默认 1431 端口）。测试数据不属于线上系统，支持 245 个虚拟用户、部门与工号、分页与增量条件。
+`npm run test:system` 启动本地系统（默认 1431 端口）。测试数据不属于线上系统，支持 245 个虚拟用户、部门与工号、分页与增量条件。
 原生自动回归使用 1432 端口，步骤见 [verification.md](verification.md)。
 
 ```sh
-pnpm check
-pnpm build:frontend
+npm run check
+npm run build:frontend
 cargo fmt --manifest-path src-tauri/Cargo.toml --check
 cargo test --manifest-path src-tauri/Cargo.toml --locked
 ```

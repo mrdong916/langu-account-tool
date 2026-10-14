@@ -5,22 +5,22 @@
 
 ## 环境
 
-使用 Node.js 22.13+、项目指定 pnpm、Rust stable。
+使用 Node.js 22.13+、Node 自带的 npm、Rust stable。
 Windows 需要 MSVC C++ build tools 与 WebView2 Runtime。
 Linux/macOS 依赖和架构说明见 docs/platforms.md。
 
 ```sh
-pnpm install --frozen-lockfile
-pnpm tauri:dev
+npm install
+npm run tauri:dev
 ```
 
-桌面开发：`pnpm tauri:dev`，自动启动前端和桌面窗口。
-前端已通过 `pnpm start` 单独运行时：`pnpm tauri:dev:attached`。
-也可以停止前端预览后直接运行 `pnpm tauri:dev`，避免固定开发端口 1430 被占用。
+桌面开发：`npm run tauri:dev`，自动启动前端和桌面窗口。
+前端已通过 `npm start` 单独运行时：`npm run tauri:dev:attached`。
+也可以停止前端预览后直接运行 `npm run tauri:dev`，避免固定开发端口 1430 被占用。
 
 ```sh
-pnpm check
-pnpm build:frontend
+npm run check
+npm run build:frontend
 cargo fmt --manifest-path src-tauri/Cargo.toml --check
 cargo test --manifest-path src-tauri/Cargo.toml
 ```
@@ -41,7 +41,7 @@ Release 标签包含应用版本、运行编号、重跑次数和提交号；不
 
 ## 本地会话验收
 
-`pnpm test:system` 启动 127.0.0.1:1431 的纯本地测试系统。
+`npm run test:system` 启动 127.0.0.1:1431 的纯本地测试系统。
 在桌面客户端将登录地址与接口地址均设为 `http://127.0.0.1:1431`。
 测试页面自动建立虚拟主账号，检索提供 45 个虚拟用户，用于验证分页和切换。
 测试服务不连接线上，不包含真实凭据，也不会随应用打包。

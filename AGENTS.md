@@ -2,7 +2,7 @@
 
 ## 技术栈与目录
 
-- 前端使用 Vue 3、TypeScript、Pinia、Vue Router；构建使用 Vite 和 pnpm。
+- 前端使用 Vue 3、TypeScript、Pinia、Vue Router；构建使用 Vite 和 npm。
 - 桌面层使用 Tauri 2 / Rust，按 commands、services、domain、infra 分层。
 - 页面放 src/views/<module>，公共组件放 src/components/<module>，状态放 src/stores。
 - 页面不得直接调用系统接口；经 src/api 调用 Rust command。
@@ -22,7 +22,7 @@
 
 - 手工改动使用小范围修改；保留用户现有改动。
 - 命名：Vue 组件 PascalCase，TS 变量 camelCase，Rust 模块 snake_case。
-- pnpm-lock.yaml、Cargo.lock 必须入库；忽略 node_modules、target、dist、work。
-- 提交前运行 pnpm check、pnpm build:frontend、cargo fmt --check、cargo test。
+- package-lock.json、Cargo.lock 必须入库；忽略 node_modules、target、dist、work。
+- 提交前运行 npm run check、npm run build:frontend、cargo fmt --check、cargo test。
 - 改动账号协议或隔离机制时运行本地测试系统并验证主/子账号不串号。
 - Conventional Commits：feat/fix/docs/refactor/test/chore(scope): 描述。

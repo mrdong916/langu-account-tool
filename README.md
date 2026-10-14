@@ -10,16 +10,16 @@ Codeup：`git@codeup.aliyun.com:6889be5d349fe2cce7f70454/tool/langu-account-tool
 
 ## 快速开始
 
-需要 Node.js 22.13+、package.json 指定的 pnpm 版本、Rust stable，以及对应平台的 Tauri 系统依赖。
+需要 Node.js 22.13+、Node 自带的 npm、Rust stable，以及对应平台的 Tauri 系统依赖。
 
 ```sh
-pnpm install --frozen-lockfile
-pnpm tauri:dev
+npm install
+npm run tauri:dev
 ```
 
 开发和打包入口沿用 nacos-control-panel 的 `tauri:dev` / `tauri:build:*` 命名。
-`pnpm tauri:dev` 自动启动前端和桌面窗口，无需额外开一个终端。
-浏览器界面预览：`pnpm start`，地址 http://127.0.0.1:1430/。
+`npm run tauri:dev` 自动启动前端和桌面窗口，无需额外开一个终端。
+浏览器界面预览：`npm start`，地址 http://127.0.0.1:1430/。
 原生账号页面仅在桌面程序运行，浏览器预览不会伪造登录或通过 iframe 模拟隔离。
 
 ## 使用
@@ -67,7 +67,7 @@ langu-account-tool/
     Cargo.lock
   AGENTS.md
   CONTRIBUTING.md
-  pnpm-lock.yaml
+  package-lock.json
 ```
 
 遵循国内 Vue 管理端项目常见模块化目录，并为 Rust 原生能力单独分层。
@@ -76,10 +76,10 @@ langu-account-tool/
 ## 验证与打包
 
 ```sh
-pnpm check
-pnpm build:frontend
+npm run check
+npm run build:frontend
 cargo test --manifest-path src-tauri/Cargo.toml
-pnpm tauri:build
+npm run tauri:build
 ```
 
 平台范围见 [docs/platforms.md](docs/platforms.md)，接入协议见 [docs/api.md](docs/api.md)。

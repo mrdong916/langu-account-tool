@@ -1,4 +1,4 @@
 $ErrorActionPreference = 'Stop'
 Set-Location (Split-Path $PSScriptRoot -Parent)
-pnpm dev
+npm run dev
 exit $LASTEXITCODE

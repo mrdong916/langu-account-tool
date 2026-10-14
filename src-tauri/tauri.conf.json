@@ -4,8 +4,8 @@
   "version": "0.1.0",
   "identifier": "com.langu.accounttool",
   "build": {
-    "beforeDevCommand": "pnpm start",
-    "beforeBuildCommand": "pnpm build:frontend",
+    "beforeDevCommand": "npm start",
+    "beforeBuildCommand": "npm run build:frontend",
     "devUrl": "http://127.0.0.1:1430",
     "frontendDist": "../dist"
   },

@@ -7,7 +7,6 @@ src-tauri/gen
 .env.local
 .DS_Store
 *.log
-pnpm-debug.log*
 work/*
 !work/.gitkeep
 src-tauri/icons/android/

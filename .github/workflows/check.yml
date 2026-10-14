@@ -19,20 +19,16 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
+          cache: npm
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
       - name: Linux dependencies
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential libxdo-dev libssl-dev librsvg2-dev libayatana-appindicator3-dev patchelf
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm check
-      - run: pnpm build:frontend
+      - run: npm ci
+      - run: npm run check
+      - run: npm run build:frontend
       - run: python3 tests/release_test.py
         if: runner.os == 'Linux'
       - run: cargo fmt --manifest-path src-tauri/Cargo.toml --check

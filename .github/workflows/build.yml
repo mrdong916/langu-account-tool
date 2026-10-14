@@ -68,11 +68,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
+          cache: npm
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.rust-targets }}
@@ -85,11 +81,11 @@ jobs:
         with:
           workspaces: src-tauri -> target
           key: ${{ matrix.target }}
-      - run: pnpm install --frozen-lockfile
+      - run: npm ci
       - run: node scripts/check-release-version.mjs
-      - run: pnpm check
+      - run: npm run check
       - name: Build installers
-        run: pnpm exec tauri build --verbose --ci --target ${{ matrix.target }} --bundles ${{ matrix.bundles }} -- --locked
+        run: npx --no-install tauri build --verbose --ci --target ${{ matrix.target }} --bundles ${{ matrix.bundles }} -- --locked
       - uses: actions/upload-artifact@v4
         with:
           name: installers-${{ matrix.target }}

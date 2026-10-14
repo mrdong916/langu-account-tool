@@ -1,8 +1,8 @@
 $ErrorActionPreference = 'Stop'
 Set-Location (Split-Path $PSScriptRoot -Parent)
-pnpm check
+npm run check
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 cargo test --manifest-path src-tauri/Cargo.toml --locked
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-pnpm build
+npm run build
 exit $LASTEXITCODE

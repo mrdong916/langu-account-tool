@@ -3,4 +3,4 @@ dist/
 work/
 src-tauri/target/
 src-tauri/gen/
-pnpm-lock.yaml
+package-lock.json

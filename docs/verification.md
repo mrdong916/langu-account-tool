@@ -23,13 +23,13 @@
 在工程根目录启动本地测试系统（保持运行）：
 
 ```sh
-LANGU_FIXTURE_PORT=1432 pnpm test:system
+LANGU_FIXTURE_PORT=1432 npm run test:system
 ```
 
 另一终端构建测试程序并创建带正式 ATS 配置的测试 app：
 
 ```sh
-pnpm build:frontend
+npm run build:frontend
 TAURI_CONFIG='{"identifier":"com.langu.accounttool.smoke"}' cargo build --manifest-path src-tauri/Cargo.toml --example webview_smoke --features custom-protocol --locked
 python3 - <<'PY'
 import plistlib
@@ -131,3 +131,11 @@ LANGU_SMOKE_MODE=remote 'work/WebView Smoke.app/Contents/MacOS/webview_smoke'
 - `pnpm tauri:dev` 实际自动启动 Vite、完成 Rust 编译并启动 macOS 桌面进程，前端 HTTP 响应正常。
 - `pnpm tauri:build:mac:arm --dry-run` 确认 ARM 目标和 APP/DMG 参数；此轮未重新生成安装包。
 - `pnpm check`（10 项 Node 测试）、`pnpm build:frontend`、`cargo fmt --check`、`cargo test`（10 项 Rust 测试）通过。
+
+## 2026-10-14 切换为 npm
+
+- 本地脚本、Tauri 前置命令和 GitHub Actions 统一使用 npm；锁文件改为 `package-lock.json`，直接依赖版本保持不变。前文 pnpm 命令仅为历史验收记录。
+- 从 npm 官方源生成锁文件，`npm ci` 安装成功；锁文件包含发布矩阵所需的各平台 Tauri CLI 包。
+- `npm run check`（10 项 Node 测试）、`npm run build:frontend`、Rust 格式检查与 10 项测试、Release ZIP 命名测试通过。
+- `npm run tauri:dev` 使用临时独立标识和 1433 端口验证，自动运行 npm 前端命令并启动 macOS 桌面进程；未停止用户原有的 1430 开发服务。
+- ARM 打包命令 dry-run 与 Tauri CLI 入口检查通过；此轮未重新生成各平台安装包。
