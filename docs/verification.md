@@ -2,6 +2,45 @@
 
 日期：2026-10-13；环境：Windows x64 / WebView2。
 
+## macOS 登录页闪退修复（2026-10-14）
+
+- macOS 26.4 原生复现：HTTP 登录页被 ATS 拒绝（`-1022`）后，Wry 0.57.0 的 `url_from_webview` 对空 `WKWebView.URL` 执行 `unwrap()`，后台登录检查使整个应用退出。
+- `Info.plist` 为 `languwin.com` 及其子域添加 HTTP 例外；其他域名仍遵循系统 ATS，HTTPS 证书校验不变。自定义 HTTP 域名需要在安装包中单独配置例外。
+- 登录读取、清理和当前地址检查改用可超时的脚本求值，避免原生空 URL；登录缓存脚本仍校验完整 origin 和顶层页面。
+- 打包后的原生冒烟测试通过：ATS 拦截首次导航时不退出；兰谷 HTTP 登录页完成加载；本地 test.admin / test.user.01 身份与草稿保持隔离。
+- TypeScript、ESLint、9 项 Node 测试、前端生产构建、Rust 格式、7 项 Rust 测试及 Clippy 通过。
+
+原生回归入口为 `src-tauri/examples/webview_smoke.rs`，只接受独立的 `com.langu.accounttool.smoke` 标识，不读取已保存账号。
+在工程根目录启动本地测试系统（保持运行）：
+
+```sh
+LANGU_FIXTURE_PORT=1432 pnpm test:system
+```
+
+另一终端构建测试程序并创建带正式 ATS 配置的测试 app：
+
+```sh
+pnpm build:frontend
+TAURI_CONFIG='{"identifier":"com.langu.accounttool.smoke"}' cargo build --manifest-path src-tauri/Cargo.toml --example webview_smoke --features custom-protocol --locked
+python3 - <<'PY'
+import plistlib
+import shutil
+from pathlib import Path
+
+contents = Path('work/WebView Smoke.app/Contents')
+(contents / 'MacOS').mkdir(parents=True, exist_ok=True)
+info = plistlib.loads(Path('src-tauri/Info.plist').read_bytes())
+info.update(CFBundleExecutable='webview_smoke', CFBundleIdentifier='com.langu.accounttool.smoke', CFBundleName='Langu WebView Smoke', CFBundlePackageType='APPL')
+(contents / 'Info.plist').write_bytes(plistlib.dumps(info))
+shutil.copy2('src-tauri/target/debug/examples/webview_smoke', contents / 'MacOS/webview_smoke')
+PY
+LANGU_SMOKE_MODE=blocked 'work/WebView Smoke.app/Contents/MacOS/webview_smoke'
+LANGU_SMOKE_MODE=local 'work/WebView Smoke.app/Contents/MacOS/webview_smoke'
+LANGU_SMOKE_MODE=remote 'work/WebView Smoke.app/Contents/MacOS/webview_smoke'
+```
+
+每次应输出 `WebView smoke passed` 并返回 0。`remote` 仅访问公开登录页，不登录或调用线上管理接口。
+
 ## 折叠入口、图标与安装包工作流
 
 - 展开状态下折叠箭头并入主账号信息右侧，折叠状态下置于头像下方；保留键盘焦点、提示及展开状态标记。

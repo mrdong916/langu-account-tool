@@ -260,28 +260,13 @@ pub async fn read_auth(app: &AppHandle, id: &str) -> AppResult<Option<Value>> {
         return Ok(None);
     };
     let expected = http_url(&config.login_url)?.origin().ascii_serialization();
-    if view.url()?.origin().ascii_serialization() != expected {
-        return Ok(None);
-    }
+    // Validate origin and the top-level frame inside the script, at the time of the read.
     let script = format!(
         "{}\nreadLanguAuth({});",
         include_str!("../../scripts/read-auth.js"),
         serde_json::to_string(&expected)?
     );
-    let (tx, rx) = tokio::sync::oneshot::channel();
-    let tx = std::sync::Mutex::new(Some(tx));
-    view.eval_with_callback(script, move |result| {
-        if let Ok(mut tx) = tx.lock() {
-            if let Some(tx) = tx.take() {
-                let _ = tx.send(result);
-            }
-        }
-    })?;
-    let result = tokio::time::timeout(Duration::from_secs(4), rx)
-        .await
-        .map_err(|_| AppError::Message("登录页面尚未就绪，请稍后重试".into()))?
-        .map_err(|_| AppError::Message("读取登录状态失败".into()))?;
-    let value: Value = serde_json::from_str(&result)?;
+    let value = eval_value(&view, script).await?;
     Ok(if value.is_object() { Some(value) } else { None })
 }
 
@@ -329,14 +314,12 @@ pub async fn return_to_login(app: &AppHandle) -> AppResult<()> {
     let config = app.state::<AppState>().lock()?.settings.clone();
     if let Some(view) = app.get_webview("primary") {
         let origin = http_url(&config.login_url)?.origin().ascii_serialization();
-        if view.url()?.origin().ascii_serialization() == origin {
-            let script = format!(
-                "{}\nclearLanguAuth({});",
-                include_str!("../../scripts/clear-auth.js"),
-                serde_json::to_string(&origin)?
-            );
-            eval_result(&view, script).await?;
-        }
+        let script = format!(
+            "{}\nclearLanguAuth({});",
+            include_str!("../../scripts/clear-auth.js"),
+            serde_json::to_string(&origin)?
+        );
+        eval_result(&view, script).await?;
         view.navigate(http_url(&config.login_url)?)?;
     }
     set_access(app, AccessStatus::Expired, "主账号登录已过期，请重新登录")
@@ -499,17 +482,24 @@ pub async fn ensure_primary(app: &AppHandle, expected: &Credential) -> AppResult
 }
 
 pub async fn eval_result(view: &Webview, script: String) -> AppResult<bool> {
+    Ok(eval_value(view, script).await? == Value::Bool(true))
+}
+
+async fn eval_value(view: &Webview, script: String) -> AppResult<Value> {
+    // Wry's macOS URL getter panics when a first navigation fails and WKWebView.URL is nil.
+    // Script evaluation can fail or time out safely, without reading that native URL.
     let (tx, rx) = tokio::sync::oneshot::channel();
     let tx = std::sync::Mutex::new(Some(tx));
     view.eval_with_callback(script, move |result| {
         if let Some(tx) = tx.lock().ok().and_then(|mut tx| tx.take()) {
-            let _ = tx.send(result == "true");
+            let _ = tx.send(result);
         }
     })?;
-    tokio::time::timeout(Duration::from_secs(4), rx)
+    let result = tokio::time::timeout(Duration::from_secs(4), rx)
         .await
-        .map_err(|_| AppError::Message("页面响应超时".into()))?
-        .map_err(|_| AppError::Message("页面已关闭".into()))
+        .map_err(|_| AppError::Message("页面尚未就绪，请稍后重试".into()))?
+        .map_err(|_| AppError::Message("页面已关闭".into()))?;
+    Ok(serde_json::from_str(&result)?)
 }
 
 pub async fn sync_active(app: &AppHandle) -> AppResult<()> {
@@ -527,7 +517,11 @@ pub async fn sync_active(app: &AppHandle) -> AppResult<()> {
     let Some(view) = app.get_webview(&id) else {
         return Ok(());
     };
-    let url = view.url()?;
+    let location = eval_value(&view, "window.location.href".into()).await?;
+    let Some(location) = location.as_str() else {
+        return Ok(());
+    };
+    let url = http_url(location)?;
     update_session(app, &id, |session| session.url = url.to_string());
     if id != "primary" && url.origin() == http_url(&config.login_url)?.origin() {
         let auth = read_auth(app, &id).await?;
