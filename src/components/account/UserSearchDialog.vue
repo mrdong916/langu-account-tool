@@ -1,31 +1,23 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import {
-  Search,
-  ArrowLeft,
-  ChevronLeft,
-  ChevronRight,
-  ArrowUpRight,
-  RefreshCw,
-} from 'lucide-vue-next';
+import { Search, X, ChevronLeft, ChevronRight, ArrowUpRight, RefreshCw } from 'lucide-vue-next';
 import { searchUsers, desktopCommand } from '@/api/workspace';
 import { useWorkspaceStore } from '@/stores/workspace';
 import type { Account, UserPage } from '@/types/workspace';
 import AccountAvatar from '@/components/account/AccountAvatar.vue';
 import SearchHighlight from '@/components/account/SearchHighlight.vue';
-const props = defineProps<{ mode: 'search' | 'directory' }>();
 const emit = defineEmits<{ close: []; opened: [] }>();
 const store = useWorkspaceStore();
+const dialog = ref<HTMLDialogElement>();
 const list = ref<HTMLElement>();
 const input = ref<HTMLInputElement>();
 const keyword = ref('');
 const page = ref(1);
 const result = ref<UserPage>({ records: [], total: 0, page: 1, pageSize: 20 });
 const selected = ref<Account>();
-const loading = ref(false);
+const loading = ref(true);
 const submitting = ref(false);
 const error = ref('');
-const hasQuery = computed(() => props.mode === 'directory' || !!keyword.value.trim());
 let generation = 0;
 let timer: ReturnType<typeof setTimeout> | undefined;
 const pages = computed(() => Math.max(1, Math.ceil(result.value.total / result.value.pageSize)));
@@ -36,18 +28,20 @@ const syncTime = computed(() =>
     ? new Date(store.state.directory.lastSync).toLocaleString()
     : '尚未完成同步',
 );
+const emptyMessage = computed(() => {
+  if (store.state.directory.syncing && !store.state.directory.count)
+    return '首次同步中，完成后即可检索';
+  return keyword.value.trim() ? '没有找到匹配的用户' : '暂无正常状态用户，请刷新用户缓存';
+});
+function close() {
+  if (!submitting.value) emit('close');
+}
 async function search(nextPage = 1) {
   clearTimeout(timer);
   const current = ++generation;
   loading.value = true;
   error.value = '';
   selected.value = undefined;
-  if (!hasQuery.value) {
-    result.value = { records: [], total: 0, page: 1, pageSize: 20 };
-    page.value = 1;
-    loading.value = false;
-    return;
-  }
   try {
     const response = await searchUsers(keyword.value, nextPage);
     if (current === generation) {
@@ -75,14 +69,6 @@ watch(
   () => store.state.directory.lastSync,
   () => void search(),
 );
-watch(
-  () => props.mode,
-  async () => {
-    keyword.value = '';
-    await search();
-    input.value?.focus();
-  },
-);
 async function moveSelection(direction: number) {
   if (loading.value || submitting.value) return;
   const index = result.value.records.findIndex((user) => user.id === selected.value?.id);
@@ -99,35 +85,43 @@ async function add(user = selected.value) {
   try {
     if (await store.run(() => desktopCommand('add_account', { username: user.username })))
       emit('opened');
+    else error.value = store.error;
   } finally {
     submitting.value = false;
   }
 }
 onMounted(() => {
+  dialog.value?.showModal();
   input.value?.focus();
   void search();
 });
 onBeforeUnmount(() => {
+  dialog.value?.close();
   generation++;
   clearTimeout(timer);
 });
 </script>
 
 <template>
-  <section class="directory-page" aria-labelledby="search-title">
+  <dialog
+    ref="dialog"
+    class="user-search-dialog"
+    aria-labelledby="search-title"
+    @cancel.prevent="close"
+  >
     <header class="dialog-header">
       <div>
-        <h2 id="search-title">{{ mode === 'directory' ? '用户列表' : '搜索账号' }}</h2>
+        <h2 id="search-title">搜索账号</h2>
         <p>仅显示正常状态账号 · 支持姓名、账号、工号、部门和拼音检索</p>
       </div>
       <button
         class="icon-button"
-        title="返回账号页面"
-        aria-label="返回账号页面"
+        title="关闭搜索（Esc）"
+        aria-label="关闭搜索"
         :disabled="submitting"
-        @click="emit('close')"
+        @click="close"
       >
-        <ArrowLeft :size="20" />
+        <X :size="20" />
       </button>
     </header>
     <form class="user-search" @submit.prevent="add()">
@@ -172,13 +166,7 @@ onBeforeUnmount(() => {
     <div ref="list" class="user-results" :aria-busy="loading">
       <div v-if="loading" class="empty-state compact">正在检索用户…</div>
       <div v-else-if="!result.records.length" class="empty-state compact">
-        {{
-          !hasQuery
-            ? '输入姓名、账号、工号、部门或拼音，即时查找账号'
-            : store.state.directory.syncing && !store.state.directory.count
-              ? '首次同步中，完成后即可检索'
-              : '没有找到匹配的用户'
-        }}
+        {{ emptyMessage }}
       </div>
       <template v-else>
         <div
@@ -220,8 +208,10 @@ onBeforeUnmount(() => {
         </div>
       </template>
     </div>
-    <div v-if="hasQuery" class="pagination">
-      <span>找到 {{ result.total }} 个用户 · ↑↓ 选择，Enter 打开</span>
+    <div class="pagination">
+      <span
+        >{{ keyword.trim() ? '找到' : '共' }} {{ result.total }} 个用户 · ↑↓ 选择，Enter 打开</span
+      >
       <div>
         <button
           class="icon-button"
@@ -243,5 +233,5 @@ onBeforeUnmount(() => {
         </button>
       </div>
     </div>
-  </section>
+  </dialog>
 </template>

@@ -35,8 +35,8 @@ fn action(app: &AppHandle, id: &str) {
         "show" => show_main(app),
         "hide" => hide_main(app),
         "quit" => app.exit(0),
-        "search" | "directory" | "settings" | "refresh-directory" | "primary" | "previous"
-        | "next" | "close-workspace" => {
+        "search" | "settings" | "refresh-directory" | "primary" | "previous" | "next"
+        | "close-workspace" => {
             show_main(app);
             let _ = app.emit_to(tauri::EventTarget::webview("main"), "desktop-action", id);
         }
@@ -54,7 +54,7 @@ pub fn setup(app: &mut tauri::App) -> AppResult<()> {
     let quit = MenuItemBuilder::with_id("quit", "退出兰谷多账号工具")
         .accelerator("CmdOrCtrl+Q")
         .build(app)?;
-    let search = MenuItemBuilder::with_id("search", "搜索 / 添加账号…")
+    let search = MenuItemBuilder::with_id("search", "搜索账号…")
         .accelerator("CmdOrCtrl+Shift+K")
         .build(app)?;
     let application = SubmenuBuilder::new(app, "兰谷多账号工具")
@@ -66,7 +66,6 @@ pub fn setup(app: &mut tauri::App) -> AppResult<()> {
         .build()?;
     let accounts = SubmenuBuilder::new(app, "账号")
         .item(&search)
-        .text("directory", "用户列表")
         .text("primary", "返回主账号")
         .text("previous", "上一个账号")
         .text("next", "下一个账号")
@@ -91,8 +90,7 @@ pub fn setup(app: &mut tauri::App) -> AppResult<()> {
     app.on_menu_event(|app, event| action(app, event.id().as_ref()));
     let tray_menu = MenuBuilder::new(app)
         .text("show", "打开兰谷多账号工具")
-        .text("search", "搜索 / 添加账号…")
-        .text("directory", "用户列表")
+        .text("search", "搜索账号…")
         .text("refresh-directory", "刷新用户缓存")
         .text("settings", "系统设置…")
         .separator()

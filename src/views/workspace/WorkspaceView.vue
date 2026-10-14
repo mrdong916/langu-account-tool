@@ -10,8 +10,8 @@ import {
   Settings2,
   X,
   Wrench,
-  ChevronLeft,
-  ChevronRight,
+  PanelLeftClose,
+  PanelLeftOpen,
   LogIn,
   ShieldAlert,
   Home,
@@ -19,10 +19,9 @@ import {
   Search,
   Minus,
   Users,
-  Database,
 } from 'lucide-vue-next';
 import AccountAvatar from '@/components/account/AccountAvatar.vue';
-import UserDirectoryView from '@/views/accounts/UserDirectoryView.vue';
+import UserSearchDialog from '@/components/account/UserSearchDialog.vue';
 import SettingsView from '@/views/settings/SettingsView.vue';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { useNativeBrowser } from '@/hooks/useNativeBrowser';
@@ -32,7 +31,7 @@ import type { WorkspaceSnapshot } from '@/types/workspace';
 
 const store = useWorkspaceStore();
 const browserHost = ref<HTMLElement>();
-const page = ref<'browser' | 'search' | 'directory'>('browser');
+const searchOpen = ref(false);
 const closeDialog = ref<HTMLDialogElement>();
 const confirmingClose = ref(false);
 const settingsDialog = ref<HTMLDialogElement>();
@@ -53,7 +52,7 @@ const visible = computed(
   () =>
     !!store.active &&
     !gateBlocked.value &&
-    page.value === 'browser' &&
+    !searchOpen.value &&
     !confirmingClose.value &&
     !settingsOpen.value,
 );
@@ -64,7 +63,7 @@ watch(collapsed, (value) => {
 watch(
   () => store.state.access.status,
   (status) => {
-    if (status !== 'ready') page.value = 'browser';
+    if (status !== 'ready') searchOpen.value = false;
   },
 );
 function primaryStatus() {
@@ -108,7 +107,7 @@ watch(
   () => store.state.active,
   () => {
     address.value = store.active?.url ?? '';
-    page.value = 'browser';
+    searchOpen.value = false;
     update();
   },
 );
@@ -138,11 +137,10 @@ onBeforeUnmount(() => {
   unlistenMenu?.();
 });
 async function menuAction(action: string) {
-  if (store.busy || settingsOpen.value || confirmingClose.value) return;
+  if (store.busy || searchOpen.value || settingsOpen.value || confirmingClose.value) return;
   if (action === 'search') {
     if (store.primary) await openSearch();
-  } else if (action === 'directory') await openDirectory('directory');
-  else if (action === 'settings') await openSettings();
+  } else if (action === 'settings') await openSettings();
   else if (action === 'refresh-directory') await store.refreshDirectory();
   else if (action === 'close-workspace') {
     if (store.primary) await askClose();
@@ -157,20 +155,17 @@ async function menuAction(action: string) {
   }
 }
 async function selectSession(id: string) {
-  page.value = 'browser';
+  searchOpen.value = false;
   await store.select(id);
 }
 async function hideNative() {
   if (isTauriRuntime()) await resizeBrowser({ x: 0, y: 0, width: 0, height: 0 }, false);
 }
 async function openSearch() {
-  await openDirectory('search');
-}
-async function openDirectory(mode: 'search' | 'directory') {
-  if (!(await store.run(() => desktopCommand('check_primary_access')))) return;
+  if (!store.authorized || store.busy) return;
   try {
     await hideNative();
-    page.value = mode;
+    if (store.authorized) searchOpen.value = true;
   } catch (reason) {
     store.report(reason);
   }
@@ -217,34 +212,13 @@ async function closeWorkspace() {
   <div class="workspace-shell" :class="{ 'sidebar-collapsed': collapsed }">
     <nav class="app-rail" aria-label="功能导航">
       <button
-        class="rail-button"
-        :class="{ active: page === 'browser' }"
+        class="rail-button active"
         title="账号工作区"
         aria-label="账号工作区"
         :disabled="store.busy"
-        @click="page = 'browser'"
+        @click="searchOpen = false"
       >
         <Users :size="21" />
-      </button>
-      <button
-        class="rail-button"
-        :class="{ active: page === 'search' }"
-        title="搜索 / 添加账号（⌘/Ctrl+Shift+K）"
-        aria-label="搜索或添加账号"
-        :disabled="!store.primary || store.busy"
-        @click="openSearch"
-      >
-        <Search :size="21" />
-      </button>
-      <button
-        class="rail-button"
-        :class="{ active: page === 'directory' }"
-        :title="`用户列表 · 已缓存 ${store.state.directory.count} 人`"
-        aria-label="用户列表"
-        :disabled="!store.authorized || store.busy"
-        @click="openDirectory('directory')"
-      >
-        <Database :size="20" :class="{ spinning: store.state.directory.syncing }" />
       </button>
       <span class="rail-spacer" />
       <button
@@ -267,10 +241,9 @@ async function closeWorkspace() {
       </button>
     </nav>
     <aside class="account-sidebar">
-      <div class="sidebar-header">
+      <div class="sidebar-header" :class="{ active: store.state.active === 'primary' }">
         <button
           class="account-item primary-profile"
-          :class="{ active: store.state.active === 'primary' }"
           :disabled="store.busy || !store.primary"
           :title="`${primaryName} · ${primaryStatus()}`"
           :aria-label="`主账号，${primaryStatus()}`"
@@ -293,7 +266,7 @@ async function closeWorkspace() {
           :aria-expanded="!collapsed"
           @click="collapsed = !collapsed"
         >
-          <ChevronRight v-if="collapsed" :size="16" /><ChevronLeft v-else :size="16" />
+          <PanelLeftOpen v-if="collapsed" :size="16" /><PanelLeftClose v-else :size="16" />
         </button>
       </div>
       <div class="sidebar-divider" />
@@ -301,9 +274,9 @@ async function closeWorkspace() {
         子账号 <span class="count">{{ store.secondary.length }}</span
         ><button
           class="icon-button small"
-          title="添加子账号"
+          title="搜索并添加账号（⌘/Ctrl+Shift+K）"
           aria-label="添加子账号"
-          :disabled="!store.primary || store.busy"
+          :disabled="!store.authorized || store.busy"
           @click="openSearch"
         >
           <Plus :size="17" />
@@ -397,13 +370,7 @@ async function closeWorkspace() {
           <X :size="16" />
         </button>
       </div>
-      <UserDirectoryView
-        v-if="page !== 'browser' && store.authorized"
-        :mode="page"
-        @close="page = 'browser'"
-        @opened="page = 'browser'"
-      />
-      <section v-else-if="store.active && gateBlocked" class="access-gate" role="status">
+      <section v-if="store.active && gateBlocked" class="access-gate" role="status">
         <ShieldAlert :size="32" />
         <h2>{{ store.state.access.message }}</h2>
         <div v-if="store.state.access.status !== 'checking'" class="form-actions">
@@ -516,13 +483,18 @@ async function closeWorkspace() {
         <div ref="browserHost" class="browser-host">
           <div class="empty-state">
             <Globe2 :size="34" /><span>{{
-              confirmingClose ? '账号页面已暂时隐藏' : '正在打开账号页面…'
+              confirmingClose || searchOpen ? '账号页面已暂时隐藏' : '正在打开账号页面…'
             }}</span>
           </div>
         </div>
       </template>
       <SettingsView v-else />
     </main>
+    <UserSearchDialog
+      v-if="searchOpen && store.authorized"
+      @close="searchOpen = false"
+      @opened="searchOpen = false"
+    />
     <dialog
       ref="settingsDialog"
       class="confirm-dialog settings-summary"

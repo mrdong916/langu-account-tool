@@ -1,13 +1,14 @@
 import test, { after, before } from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer } from 'vite';
-import { createSSRApp } from 'vue';
+import { createSSRApp, ref } from 'vue';
 import { renderToString } from 'vue/server-renderer';
 import { createPinia } from 'pinia';
 
 let server;
 let WorkspaceView;
 let useWorkspaceStore;
+let useNativeBrowser;
 const previousStorage = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
 
 before(async () => {
@@ -18,6 +19,7 @@ before(async () => {
   server = await createServer({ server: { middlewareMode: true, hmr: false, watch: null } });
   WorkspaceView = (await server.ssrLoadModule('/src/views/workspace/WorkspaceView.vue')).default;
   ({ useWorkspaceStore } = await server.ssrLoadModule('/src/stores/workspace.ts'));
+  ({ useNativeBrowser } = await server.ssrLoadModule('/src/hooks/useNativeBrowser.ts'));
 });
 
 after(async () => {
@@ -109,4 +111,61 @@ test('expired primary status remains visible without exposing the username', asy
   assert.match(html, /主账号登录已过期，请重新登录/);
   assert.match(html, /class="(?=[^"]*\bstatus-dot\b)(?=[^"]*\bpending\b)[^"]*"/);
   assert.ok(!html.includes(account.username));
+});
+
+test('add-account opens search only for an authorized primary, without separate navigation entries', async () => {
+  const ready = await renderWorkspace();
+  assert.match(ready, /aria-label="添加子账号"(?! disabled)/);
+  assert.ok(!ready.includes('lucide-database'));
+  assert.ok(!ready.includes('aria-label="搜索账号"'));
+  for (const status of ['pending', 'checking', 'denied', 'expired', 'unavailable']) {
+    const html = await renderWorkspace({ status });
+    assert.match(html, /aria-label="添加子账号" disabled/);
+  }
+});
+
+test('native browser restores without animation frames and skips unchanged bounds', async () => {
+  const calls = [];
+  const globals = {
+    window: {
+      __TAURI_INTERNALS__: { invoke: async (command, args) => calls.push({ command, args }) },
+    },
+    requestAnimationFrame: () => 0, // Simulate a background WebView that never draws a frame.
+    cancelAnimationFrame: () => {},
+  };
+  const previous = Object.fromEntries(
+    Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]),
+  );
+  try {
+    for (const [key, value] of Object.entries(globals))
+      Object.defineProperty(globalThis, key, { configurable: true, value });
+    const bounds = { x: 278, y: 57, width: 822, height: 671 };
+    const host = ref({ getBoundingClientRect: () => bounds });
+    const visible = ref(false);
+    let browser;
+    await renderToString(
+      createSSRApp({
+        setup() {
+          browser = useNativeBrowser(host, visible, (error) => {
+            throw error;
+          });
+          return () => null;
+        },
+      }),
+    );
+    browser.update();
+    visible.value = true;
+    browser.update();
+    browser.update();
+    await new Promise(setImmediate);
+    assert.deepEqual(calls, [
+      { command: 'browser_bounds', args: { bounds, visible: false } },
+      { command: 'browser_bounds', args: { bounds, visible: true } },
+    ]);
+  } finally {
+    for (const [key, descriptor] of Object.entries(previous)) {
+      if (descriptor) Object.defineProperty(globalThis, key, descriptor);
+      else delete globalThis[key];
+    }
+  }
 });

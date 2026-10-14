@@ -140,19 +140,19 @@ input[type='checkbox'] {
   color: #3d454e;
   overflow: hidden;
 }
-.account-item:hover:not(:disabled),
 .account-row:hover {
   background: #eef1f4;
 }
-.account-item.active,
 .account-row.active {
   background: var(--primary-soft);
   color: var(--primary-text);
 }
 .account-item.primary-profile {
+  min-width: 0;
   flex-shrink: 0;
   min-height: 64px;
-  gap: 14px;
+  gap: 12px;
+  color: inherit;
   overflow: visible;
 }
 .primary-profile:disabled {
@@ -327,10 +327,26 @@ input[type='checkbox'] {
 .sidebar-header {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 28px;
-  gap: 4px;
+  gap: 2px;
   align-items: center;
   flex-shrink: 0;
-  margin-block: 8px 4px;
+  margin-block: 12px 4px;
+  padding-right: 6px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fff;
+  color: #3d454e;
+}
+.sidebar-header:not(.active):has(.primary-profile:hover:not(:disabled)) {
+  background: #eef1f4;
+}
+.sidebar-header.active {
+  background: var(--primary-soft);
+  border-color: #b9dfff;
+  color: var(--primary-text);
+}
+.sidebar-header .avatar-primary-badge {
+  border-color: #fff;
 }
 .sidebar-toggle.icon-button {
   width: 28px;
@@ -341,6 +357,7 @@ input[type='checkbox'] {
   grid-template-columns: minmax(0, 1fr);
   justify-items: center;
   gap: 0;
+  padding: 0 0 4px;
 }
 .sidebar-collapsed .sidebar-label {
   min-height: 30px;
@@ -859,6 +876,7 @@ dialog::backdrop {
     grid-template-columns: minmax(0, 1fr);
     justify-items: center;
     gap: 0;
+    padding: 0 0 4px;
   }
   .account-item.primary-profile {
     min-height: 64px;
@@ -1002,32 +1020,32 @@ dialog::backdrop {
   color: var(--muted);
   font-size: 12px;
 }
-.directory-page {
+.user-search-dialog[open] {
   display: flex;
   flex-direction: column;
-  flex: 1;
-  min-height: 0;
+  width: min(720px, calc(100vw - 32px));
+  height: min(680px, calc(100dvh - 48px));
   overflow: hidden;
 }
-.directory-page .dialog-header,
-.directory-page .user-search,
-.directory-page .directory-status,
-.directory-page .pagination {
+.user-search-dialog .dialog-header,
+.user-search-dialog .user-search,
+.user-search-dialog .directory-status,
+.user-search-dialog .pagination {
   flex-shrink: 0;
 }
-.directory-page .user-results {
+.user-search-dialog .user-results {
   flex: 1;
   min-height: 0;
   max-height: none;
   overflow: auto;
   padding: 0 24px;
 }
-.directory-page .user-result {
+.user-search-dialog .user-result {
   border-bottom: 1px solid var(--line);
   border-radius: 0;
   min-height: 90px;
 }
-.directory-page .user-description small {
+.user-search-dialog .user-description small {
   white-space: normal;
 }
 .open-account {
