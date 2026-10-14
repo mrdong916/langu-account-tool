@@ -119,7 +119,17 @@ jobs:
       - name: Prepare release assets
         run: |
           mkdir release
-          find installers -type f -exec cp -n {} release/ \;
+          product_name=$(node -p "require('./src-tauri/tauri.conf.json').productName")
+          package_name=$(node -p "require('./package.json').name")
+          while IFS= read -r -d '' file; do
+            name=$(basename "$file")
+            name="${name/#$product_name/$package_name}"
+            if [[ "$name" != "$package_name"* || -e "release/$name" ]]; then
+              echo "Unexpected or duplicate installer name: $name" >&2
+              exit 1
+            fi
+            cp -- "$file" "release/$name"
+          done < <(find installers -type f -print0)
           cd release
           sha256sum * > SHA256SUMS.txt
       - name: Publish all installers together
@@ -149,7 +159,7 @@ jobs:
           EOF
           gh release create "$tag" release/* \
             --target "$GITHUB_SHA" \
-            --title "兰谷多账号工具 ${tag}" \
+            --title "$tag" \
             --notes-file release-notes.md \
             --draft
           gh release edit "$tag" --draft=false

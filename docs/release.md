@@ -9,6 +9,7 @@ GitHub 仓库：`mrdong916/langu-account-tool`，主分支 `main`。
 - GitHub 仓库 Actions → Build and release → Run workflow：手动选择分支构建；选择 `main` 时也会自动发布，其他分支只构建。
 - 构建完成后，在运行详情页的 Artifacts 下载 `installers-<Rust target>`；压缩包内为安装包，保留 30 天。
 - GitHub Releases 提供全部安装包及 `SHA256SUMS.txt`。上传时先创建草稿，上传成功后自动公开，无需维护者手工发布。
+- Release 标题只显示版本标签。附件统一使用 `langu-account-tool` 前缀（例如 `langu-account-tool_0.1.0_universal.dmg`），避免 GitHub 清理中文文件名时丢失软件名称；校验清单使用最终附件名。
 - `check.yml` 在 pull_request、手动执行或由构建工作流调用时运行三平台类型、lint、测试、格式及 Clippy 检查；拉取请求不触发安装包发布。
 - 其他分支和标签推送不触发发布；连续推送不会取消较早提交的构建。
 
