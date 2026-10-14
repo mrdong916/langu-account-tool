@@ -6,6 +6,9 @@ const port = Number(process.env.LANGU_FIXTURE_PORT ?? 1431);
 const fixtureTime = '2026-01-01 00:00:00';
 const users = Array.from({ length: 245 }, (_, i) => ({ id: `fixture-${i + 1}`, username: `test.user.${String(i + 1).padStart(2, '0')}`, realname: i === 0 ? '张三' : `测试用户${i + 1}`, orgCodeTxt: '权限部门', realDepart: 'A01', realDepart_dictText: '财务部', workNo: `A${1000 + i}`, status: 1, createTime: fixtureTime, updateTime: fixtureTime, avatar: '' }));
 const main = { id: 'fixture-main', username: 'test.admin', avatar: '' };
+for (const [id, status] of [['frozen', 2], ['resigned', 3], ['unknown', '']]) {
+  users.push({ ...users[0], id: `fixture-${id}`, username: `test.${id}`, realname: id, status });
+}
 const secret = 'dd05f1c54d63749eda95f9fa6d49v442a';
 const tokens = new Map([['fixture-main-token', 'test.admin']]);
 const revoked = new Set();
@@ -64,17 +67,18 @@ const server = createServer(async (req, res) => {
     if (url.pathname === '/sys/user/list') {
       if (Number(params.pageNo) === failDirectoryPage) return json({ success: false, message: 'Fixture directory page failure' }, 503);
       const query = (params.username ?? '').replaceAll('*', '');
-      const matches = users.filter(user => user.username.includes(query) && ['createTime', 'updateTime'].every(field =>
+      const matches = users.filter(user => (!params.status || String(user.status) === params.status) && user.username.includes(query) && ['createTime', 'updateTime'].every(field =>
         (!params[`${field}_begin`] || user[field] >= params[`${field}_begin`]) && (!params[`${field}_end`] || user[field] <= params[`${field}_end`])));
       const columns = (params.column || 'id').split(',');
       matches.sort((a, b) => { for (const field of columns) { const order = String(a[field] ?? '').localeCompare(String(b[field] ?? '')); if (order) return params.order === 'desc' ? -order : order; } return 0; });
       const page = Number(params.pageNo ?? 1);
       const size = Number(params.pageSize ?? 20);
-      return json({ success: true, result: { records: matches.slice((page - 1) * size, page * size), total: matches.length } });
+      const records = matches.slice((page - 1) * size, page * size);
+      return json({ success: true, result: { records: params.field === 'id' ? records.map(user => ({ id: user.id })) : records, total: matches.length } });
     }
     if (url.pathname === '/sys/internalLoginByAdmin') {
       const userInfo = users.find(user => user.username === params.username);
-      if (!userInfo) return json({ success: false, message: 'User not found' });
+      if (!userInfo || userInfo.status !== 1) return json({ success: false, message: 'User unavailable' });
       const token = `fixture-token-${userInfo.id}-${++issued}`;
       tokens.set(token, userInfo.username);
       return json({ success: true, result: { token, userInfo, accounts: [], sysAllDictItems: {}, erpUserInfo: [] } });

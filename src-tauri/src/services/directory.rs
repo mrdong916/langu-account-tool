@@ -80,6 +80,7 @@ pub fn search(app: &AppHandle, keyword: &str, page: u32) -> AppResult<UserPage> 
     let mut matches: Vec<_> = directory
         .users
         .values()
+        .filter(|user| user.status == "1")
         .filter_map(|user| score(user, keyword).map(|rank| (rank, user)))
         .collect();
     matches.sort_by(|a, b| {
@@ -315,6 +316,36 @@ async fn synchronize(
             page += 1;
         }
     }
+    let active_ids = if full {
+        updates
+            .values()
+            .filter(|user| user.status == "1")
+            .map(|user| user.id.clone())
+            .collect()
+    } else {
+        let mut ids = HashSet::new();
+        let mut page = 1;
+        let mut expected_total = None;
+        loop {
+            valid(app, generation, credential).await?;
+            let (batch, total) = langu::active_directory_ids(config, credential, page).await?;
+            if expected_total.is_some_and(|expected| expected != total)
+                || (batch.is_empty() && (ids.len() as u64) < total)
+                || batch.into_iter().any(|id| !ids.insert(id))
+                || ids.len() as u64 > total
+            {
+                return Err(AppError::Message(
+                    "正常账号列表已变化，已保留原缓存，请重试".into(),
+                ));
+            }
+            expected_total = Some(total);
+            if ids.len() as u64 == total {
+                break;
+            }
+            page += 1;
+        }
+        ids
+    };
     valid(app, generation, credential).await?;
     let handle = app.clone();
     let scope = scope.to_string();
@@ -327,17 +358,21 @@ async fn synchronize(
         if directory.generation != generation {
             return Ok(());
         }
-        storage::save(
+        let mut users = if full {
+            BTreeMap::new()
+        } else {
+            directory.users.clone()
+        };
+        users.extend(updates);
+        users.retain(|id, user| user.status == "1" && active_ids.contains(id));
+        storage::save_snapshot(
             &db,
             &scope,
-            &updates.values().cloned().collect::<Vec<_>>(),
+            &users.values().cloned().collect::<Vec<_>>(),
             full,
             until,
         )?;
-        if full {
-            directory.users.clear();
-        }
-        directory.users.extend(updates);
+        directory.users = users;
         directory.status.count = directory.users.len();
         directory.status.last_sync = Some(until);
         if full {

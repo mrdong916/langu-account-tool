@@ -665,6 +665,7 @@ input[type='checkbox'] {
   padding: 8px 14px;
   border-bottom: 1px solid var(--line);
   background: #fafbfc;
+  flex-shrink: 0;
 }
 .browser-navigation {
   display: flex;
@@ -683,7 +684,7 @@ input[type='checkbox'] {
   padding: 0 7px 0 11px;
   color: #89939b;
 }
-.address-bar input {
+.address-bar input:not([type='checkbox']) {
   border: 0;
   border-radius: 0;
   padding: 0;
@@ -718,28 +719,6 @@ input[type='checkbox'] {
   min-height: 180px;
   font-size: 13px;
 }
-.browser-status {
-  display: flex;
-  justify-content: space-between;
-  gap: 20px;
-  padding: 0 15px;
-  height: 28px;
-  min-height: 28px;
-  border-top: 1px solid var(--line);
-  font-size: 10px;
-  color: #8a929a;
-}
-.browser-status > span {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
-.page-title {
-  max-width: 50%;
-}
 dialog {
   border: 1px solid #e1e5e8;
   border-radius: 8px;
@@ -749,10 +728,6 @@ dialog {
 }
 dialog::backdrop {
   background: #18242b55;
-}
-.account-dialog {
-  width: min(660px, calc(100vw - 32px));
-  max-height: calc(100dvh - 50px);
 }
 .dialog-header {
   display: flex;
@@ -833,9 +808,6 @@ dialog::backdrop {
   color: #9aa2aa;
   overflow-wrap: anywhere;
 }
-.selection-check {
-  color: var(--primary);
-}
 .pagination {
   display: flex;
   justify-content: space-between;
@@ -848,21 +820,6 @@ dialog::backdrop {
   display: flex;
   align-items: center;
   gap: 10px;
-}
-.dialog-footer {
-  border-top: 1px solid var(--line);
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 20px;
-  padding: 17px 24px;
-}
-.selected-name {
-  color: #939aa2;
-  font-size: 12px;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
 }
 .confirm-dialog {
   width: min(440px, calc(100vw - 32px));
@@ -988,14 +945,7 @@ dialog::backdrop {
   .address-bar {
     flex-basis: calc(100% - 40px);
   }
-  .browser-status {
-    padding: 0 8px;
-  }
-  .page-title {
-    display: none !important;
-  }
-  .dialog-header,
-  .dialog-footer {
+  .dialog-header {
     padding: 18px;
   }
   .user-search {
@@ -1003,30 +953,13 @@ dialog::backdrop {
   }
 }
 
-/* Native-style navigation rail and a dedicated drag area; browser bounds follow this grid. */
+/* The OS owns the title bar; every column fills the remaining content area. */
 .workspace-shell {
   grid-template-columns: 54px 224px minmax(0, 1fr);
-  grid-template-rows: 34px minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
 }
 .workspace-shell.sidebar-collapsed {
   grid-template-columns: 54px 68px minmax(0, 1fr);
-}
-.native-titlebar {
-  grid-column: 1 / -1;
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  padding: 0 18px;
-  background: #f4f6f8;
-  border-bottom: 1px solid var(--line);
-  font-size: 12px;
-  user-select: none;
-}
-.native-titlebar small {
-  color: var(--muted);
-}
-.is-mac .native-titlebar {
-  padding-left: 84px;
 }
 .app-rail {
   display: flex;
@@ -1068,6 +1001,37 @@ dialog::backdrop {
   padding: 0 24px 12px;
   color: var(--muted);
   font-size: 12px;
+}
+.directory-page {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+.directory-page .dialog-header,
+.directory-page .user-search,
+.directory-page .directory-status,
+.directory-page .pagination {
+  flex-shrink: 0;
+}
+.directory-page .user-results {
+  flex: 1;
+  min-height: 0;
+  max-height: none;
+  overflow: auto;
+  padding: 0 24px;
+}
+.directory-page .user-result {
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  min-height: 90px;
+}
+.directory-page .user-description small {
+  white-space: normal;
+}
+.open-account {
+  flex-shrink: 0;
 }
 .directory-status > span {
   display: inline-flex;
@@ -1113,9 +1077,6 @@ mark {
   }
   .workspace-shell.sidebar-collapsed {
     grid-template-columns: 46px 68px minmax(0, 1fr);
-  }
-  .native-titlebar small {
-    display: none;
   }
   .directory-status {
     flex-wrap: wrap;

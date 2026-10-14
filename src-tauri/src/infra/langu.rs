@@ -181,6 +181,7 @@ pub fn directory_params(page: u32, range: Option<(&str, i64, i64)>) -> BTreeMap<
         ("order".into(), "asc".into()),
         ("pageNo".into(), page.to_string()),
         ("pageSize".into(), "200".into()),
+        ("status".into(), "1".into()),
     ]);
     if let Some((field, since, until)) = range {
         params.insert("column".into(), format!("{field},id"));
@@ -225,6 +226,33 @@ pub async fn directory_page(
         page,
         page_size: 200,
     })
+}
+
+// Reconcile membership without fetching unchanged user details on incremental syncs.
+pub async fn active_directory_ids(
+    settings: &Settings,
+    credential: &Credential,
+    page: u32,
+) -> AppResult<(Vec<String>, u64)> {
+    let mut params = directory_params(page, None);
+    params.insert("field".into(), "id".into());
+    let result = request(settings, credential, "/sys/user/list", params, false).await?;
+    let ids = result["records"]
+        .as_array()
+        .ok_or_else(|| AppError::Message("用户列表缺少 records".into()))?
+        .iter()
+        .map(|user| {
+            user["id"]
+                .as_str()
+                .filter(|id| !id.is_empty())
+                .map(str::to_owned)
+                .ok_or_else(|| AppError::Message("用户列表缺少 id".into()))
+        })
+        .collect::<AppResult<Vec<_>>>()?;
+    let total = result["total"]
+        .as_u64()
+        .ok_or_else(|| AppError::Message("用户列表缺少 total".into()))?;
+    Ok((ids, total))
 }
 
 async fn request(
@@ -491,5 +519,17 @@ mod tests {
     fn matches_langu_supplied_signature_without_reusing_credentials() {
         let params = BTreeMap::from([("username".into(), "董永辉(A1186)".into())]);
         assert_eq!(signature(&params), "3913DEC17FA6913759FBFA84757ACF42");
+    }
+    #[test]
+    fn every_directory_query_filters_normal_accounts() {
+        for range in [
+            None,
+            Some(("createTime", 0, 1000)),
+            Some(("updateTime", 0, 1000)),
+        ] {
+            let params = directory_params(2, range);
+            assert_eq!(params["status"], "1");
+            assert_eq!(params["pageNo"], "2");
+        }
     }
 }

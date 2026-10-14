@@ -1,14 +1,23 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import { Search, X, ChevronLeft, ChevronRight, Check, UserPlus, RefreshCw } from 'lucide-vue-next';
+import {
+  Search,
+  ArrowLeft,
+  ChevronLeft,
+  ChevronRight,
+  ArrowUpRight,
+  RefreshCw,
+} from 'lucide-vue-next';
 import { searchUsers, desktopCommand } from '@/api/workspace';
 import { useWorkspaceStore } from '@/stores/workspace';
 import type { Account, UserPage } from '@/types/workspace';
-import AccountAvatar from './AccountAvatar.vue';
-import SearchHighlight from './SearchHighlight.vue';
-const emit = defineEmits<{ close: [] }>();
+import AccountAvatar from '@/components/account/AccountAvatar.vue';
+import SearchHighlight from '@/components/account/SearchHighlight.vue';
+const props = defineProps<{ mode: 'search' | 'directory' }>();
+const emit = defineEmits<{ close: []; opened: [] }>();
 const store = useWorkspaceStore();
-const dialog = ref<HTMLDialogElement>();
+const list = ref<HTMLElement>();
+const input = ref<HTMLInputElement>();
 const keyword = ref('');
 const page = ref(1);
 const result = ref<UserPage>({ records: [], total: 0, page: 1, pageSize: 20 });
@@ -16,6 +25,7 @@ const selected = ref<Account>();
 const loading = ref(false);
 const submitting = ref(false);
 const error = ref('');
+const hasQuery = computed(() => props.mode === 'directory' || !!keyword.value.trim());
 let generation = 0;
 let timer: ReturnType<typeof setTimeout> | undefined;
 const pages = computed(() => Math.max(1, Math.ceil(result.value.total / result.value.pageSize)));
@@ -32,6 +42,12 @@ async function search(nextPage = 1) {
   loading.value = true;
   error.value = '';
   selected.value = undefined;
+  if (!hasQuery.value) {
+    result.value = { records: [], total: 0, page: 1, pageSize: 20 };
+    page.value = 1;
+    loading.value = false;
+    return;
+  }
   try {
     const response = await searchUsers(keyword.value, nextPage);
     if (current === generation) {
@@ -59,29 +75,36 @@ watch(
   () => store.state.directory.lastSync,
   () => void search(),
 );
+watch(
+  () => props.mode,
+  async () => {
+    keyword.value = '';
+    await search();
+    input.value?.focus();
+  },
+);
 async function moveSelection(direction: number) {
   if (loading.value || submitting.value) return;
   const index = result.value.records.findIndex((user) => user.id === selected.value?.id);
   selected.value =
     result.value.records[Math.max(0, Math.min(result.value.records.length - 1, index + direction))];
   await nextTick();
-  dialog.value?.querySelector('.user-result.selected')?.scrollIntoView({ block: 'nearest' });
+  list.value?.querySelector('.user-result.selected')?.scrollIntoView({ block: 'nearest' });
 }
-async function add() {
-  if (!selected.value || submitting.value || loading.value) return;
+async function add(user = selected.value) {
+  if (!user || submitting.value || loading.value || store.busy) return;
+  selected.value = user;
   submitting.value = true;
   error.value = '';
   try {
-    await desktopCommand('add_account', { username: selected.value.username });
-    emit('close');
-  } catch (reason) {
-    error.value = String(reason);
+    if (await store.run(() => desktopCommand('add_account', { username: user.username })))
+      emit('opened');
   } finally {
     submitting.value = false;
   }
 }
 onMounted(() => {
-  dialog.value?.showModal();
+  input.value?.focus();
   void search();
 });
 onBeforeUnmount(() => {
@@ -91,32 +114,27 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <dialog
-    ref="dialog"
-    class="account-dialog"
-    aria-labelledby="search-title"
-    @cancel.prevent="!submitting && emit('close')"
-  >
+  <section class="directory-page" aria-labelledby="search-title">
     <header class="dialog-header">
       <div>
-        <h2 id="search-title">搜索 / 添加账号</h2>
-        <p>按姓名、账号、工号、部门或拼音查找</p>
+        <h2 id="search-title">{{ mode === 'directory' ? '用户列表' : '搜索账号' }}</h2>
+        <p>仅显示正常状态账号 · 支持姓名、账号、工号、部门和拼音检索</p>
       </div>
       <button
         class="icon-button"
-        title="关闭"
-        aria-label="关闭"
+        title="返回账号页面"
+        aria-label="返回账号页面"
         :disabled="submitting"
         @click="emit('close')"
       >
-        <X :size="20" />
+        <ArrowLeft :size="20" />
       </button>
     </header>
-    <form class="user-search" @submit.prevent="add">
+    <form class="user-search" @submit.prevent="add()">
       <div class="input-icon">
         <Search :size="18" /><input
+          ref="input"
           v-model="keyword"
-          autofocus
           aria-label="检索姓名、账号、工号、部门或拼音"
           placeholder="试试「张三」「zhangsan」「zs」或「财务 张」"
           :disabled="submitting"
@@ -151,26 +169,24 @@ onBeforeUnmount(() => {
         <RefreshCw :size="16" />
       </button>
     </div>
-    <div class="user-results" :aria-busy="loading">
+    <div ref="list" class="user-results" :aria-busy="loading">
       <div v-if="loading" class="empty-state compact">正在检索用户…</div>
       <div v-else-if="!result.records.length" class="empty-state compact">
         {{
-          store.state.directory.syncing && !store.state.directory.count
-            ? '首次同步中，完成后即可检索'
-            : '没有找到匹配的用户'
+          !hasQuery
+            ? '输入姓名、账号、工号、部门或拼音，即时查找账号'
+            : store.state.directory.syncing && !store.state.directory.count
+              ? '首次同步中，完成后即可检索'
+              : '没有找到匹配的用户'
         }}
       </div>
       <template v-else>
-        <button
+        <div
           v-for="user in result.records"
           :key="user.id"
-          type="button"
           class="user-result"
           :class="{ selected: selected?.id === user.id }"
-          :disabled="submitting"
-          :aria-pressed="selected?.id === user.id"
           @click="selected = user"
-          @dblclick="add"
         >
           <AccountAvatar :src="user.avatar" :username="user.username" />
           <span class="user-description">
@@ -187,13 +203,24 @@ onBeforeUnmount(() => {
               >部门：<SearchHighlight :text="user.department || '未提供部门'" :query="keyword"
             /></small>
           </span>
-          <span v-if="user.status === '2'" class="badge neutral">已冻结</span>
-          <span v-if="existing(user)" class="badge neutral">已打开</span
-          ><Check v-if="selected?.id === user.id" :size="18" class="selection-check" />
-        </button>
+          <button
+            class="button secondary open-account"
+            :disabled="submitting || loading || store.busy"
+            :aria-label="`${existing(user) ? '切换到' : '直接打开'} ${user.realname || user.username}`"
+            @click.stop="add(user)"
+          >
+            <ArrowUpRight :size="16" />{{
+              submitting && selected?.id === user.id
+                ? '正在打开…'
+                : existing(user)
+                  ? '切换到账号'
+                  : '直接打开'
+            }}
+          </button>
+        </div>
       </template>
     </div>
-    <div class="pagination">
+    <div v-if="hasQuery" class="pagination">
       <span>找到 {{ result.total }} 个用户 · ↑↓ 选择，Enter 打开</span>
       <div>
         <button
@@ -216,15 +243,5 @@ onBeforeUnmount(() => {
         </button>
       </div>
     </div>
-    <footer class="dialog-footer">
-      <span class="selected-name">{{
-        selected?.realname || selected?.username || '未选择账号'
-      }}</span
-      ><button class="button primary" :disabled="!selected || submitting || loading" @click="add">
-        <UserPlus :size="17" />{{
-          submitting ? '正在登录…' : selected && existing(selected) ? '切换到账号' : '确认并打开'
-        }}
-      </button>
-    </footer>
-  </dialog>
+  </section>
 </template>

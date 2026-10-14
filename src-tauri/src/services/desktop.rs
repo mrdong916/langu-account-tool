@@ -35,8 +35,8 @@ fn action(app: &AppHandle, id: &str) {
         "show" => show_main(app),
         "hide" => hide_main(app),
         "quit" => app.exit(0),
-        "search" | "settings" | "refresh-directory" | "primary" | "previous" | "next"
-        | "close-workspace" => {
+        "search" | "directory" | "settings" | "refresh-directory" | "primary" | "previous"
+        | "next" | "close-workspace" => {
             show_main(app);
             let _ = app.emit_to(tauri::EventTarget::webview("main"), "desktop-action", id);
         }
@@ -66,6 +66,7 @@ pub fn setup(app: &mut tauri::App) -> AppResult<()> {
         .build()?;
     let accounts = SubmenuBuilder::new(app, "账号")
         .item(&search)
+        .text("directory", "用户列表")
         .text("primary", "返回主账号")
         .text("previous", "上一个账号")
         .text("next", "下一个账号")
@@ -91,6 +92,7 @@ pub fn setup(app: &mut tauri::App) -> AppResult<()> {
     let tray_menu = MenuBuilder::new(app)
         .text("show", "打开兰谷多账号工具")
         .text("search", "搜索 / 添加账号…")
+        .text("directory", "用户列表")
         .text("refresh-directory", "刷新用户缓存")
         .text("settings", "系统设置…")
         .separator()
@@ -115,8 +117,6 @@ pub fn setup(app: &mut tauri::App) -> AppResult<()> {
         })
         .build(app)?;
     if let Some(parent) = app.get_webview_window("main") {
-        #[cfg(target_os = "macos")]
-        parent.set_title_bar_style(tauri::TitleBarStyle::Overlay)?;
         let handle = app.handle().clone();
         let hint =
             WebviewWindowBuilder::new(app, "switch-hint", WebviewUrl::App("switch.html".into()))

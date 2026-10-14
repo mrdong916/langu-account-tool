@@ -70,7 +70,7 @@ async fn check_directory(app: &AppHandle) -> AppResult<()> {
         serde_json::json!({"id":"fixture-1", "realDepart_dictText":"研发部", "updateTime":now}),
     )
     .await?;
-    fixture("users", serde_json::json!({"id":"fixture-new", "username":"test.new", "realname":"李四", "realDepart_dictText":"研发部", "createTime":now})).await?;
+    fixture("users", serde_json::json!({"id":"fixture-new", "username":"test.new", "realname":"李四", "realDepart_dictText":"研发部", "status":1, "createTime":now})).await?;
     directory::reset(app); // Simulate a new process loading the persisted owner partition.
     workspace::sync_primary(app).await?;
     wait_directory(app, 246).await?;
@@ -94,6 +94,32 @@ async fn check_directory(app: &AppHandle) -> AppResult<()> {
             "Restart should sync incrementally".into(),
         ));
     }
+    // A normal-only delta cannot return newly frozen users; the ID reconciliation must prune them.
+    fixture(
+        "users",
+        serde_json::json!({"id":"fixture-2", "status":2, "updateTime":now}),
+    )
+    .await?;
+    directory::reset(app);
+    workspace::sync_primary(app).await?;
+    wait_directory(app, 245).await?;
+    if directory::search(app, "test.user.02", 1)?.total != 0
+        || directory::search(app, "test.frozen", 1)?.total != 0
+        || directory::search(app, "test.resigned", 1)?.total != 0
+        || directory::search(app, "test.unknown", 1)?.total != 0
+    {
+        return Err(AppError::Message(
+            "Inactive accounts leaked into the directory".into(),
+        ));
+    }
+    fixture(
+        "users",
+        serde_json::json!({"id":"fixture-2", "status":1, "updateTime":now}),
+    )
+    .await?;
+    directory::reset(app);
+    workspace::sync_primary(app).await?;
+    wait_directory(app, 246).await?;
     fixture(
         "users",
         serde_json::json!({"id":"fixture-new", "remove":true}),
@@ -219,6 +245,7 @@ async fn check(app: &AppHandle) -> AppResult<()> {
             .join("directory/users.sqlite3"),
     );
     if mode == "local" {
+        fixture("users", serde_json::json!({"id":"fixture-2", "status":1})).await?;
         fixture("users", serde_json::json!({"id":"fixture-1", "realDepart_dictText":"财务部", "updateTime":"2026-01-01 00:00:00"})).await?;
         fixture(
             "users",

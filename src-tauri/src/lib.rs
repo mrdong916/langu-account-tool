@@ -57,7 +57,6 @@ pub fn run() {
             commands::workspace::sync_sessions,
             commands::workspace::search_users,
             commands::workspace::refresh_directory,
-            commands::workspace::drag_window,
             commands::workspace::add_account,
             commands::workspace::check_primary_access,
             commands::workspace::relogin_primary,

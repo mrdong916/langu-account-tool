@@ -8,7 +8,6 @@ import {
   Plus,
   RefreshCw,
   Settings2,
-  ShieldCheck,
   X,
   Wrench,
   ChevronLeft,
@@ -23,7 +22,7 @@ import {
   Database,
 } from 'lucide-vue-next';
 import AccountAvatar from '@/components/account/AccountAvatar.vue';
-import UserSearchDialog from '@/components/account/UserSearchDialog.vue';
+import UserDirectoryView from '@/views/accounts/UserDirectoryView.vue';
 import SettingsView from '@/views/settings/SettingsView.vue';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { useNativeBrowser } from '@/hooks/useNativeBrowser';
@@ -33,7 +32,7 @@ import type { WorkspaceSnapshot } from '@/types/workspace';
 
 const store = useWorkspaceStore();
 const browserHost = ref<HTMLElement>();
-const searchOpen = ref(false);
+const page = ref<'browser' | 'search' | 'directory'>('browser');
 const closeDialog = ref<HTMLDialogElement>();
 const confirmingClose = ref(false);
 const settingsDialog = ref<HTMLDialogElement>();
@@ -43,7 +42,6 @@ const address = ref('');
 const addressFocused = ref(false);
 const filter = ref('');
 const collapsed = ref(localStorage.getItem('langu-sidebar-collapsed') === 'true');
-const isMac = ref(false);
 const primaryName = computed(() => {
   const account = store.primary?.account;
   return account?.realname && account.realname !== account.username ? account.realname : '主账号';
@@ -55,7 +53,7 @@ const visible = computed(
   () =>
     !!store.active &&
     !gateBlocked.value &&
-    !searchOpen.value &&
+    page.value === 'browser' &&
     !confirmingClose.value &&
     !settingsOpen.value,
 );
@@ -66,7 +64,7 @@ watch(collapsed, (value) => {
 watch(
   () => store.state.access.status,
   (status) => {
-    if (status !== 'ready') searchOpen.value = false;
+    if (status !== 'ready') page.value = 'browser';
   },
 );
 function primaryStatus() {
@@ -110,11 +108,11 @@ watch(
   () => store.state.active,
   () => {
     address.value = store.active?.url ?? '';
+    page.value = 'browser';
     update();
   },
 );
 onMounted(async () => {
-  isMac.value = /Mac/.test(navigator.platform);
   if (isTauriRuntime()) {
     unlisten = await listen<WorkspaceSnapshot>('workspace-changed', (event) =>
       store.apply(event.payload),
@@ -140,35 +138,39 @@ onBeforeUnmount(() => {
   unlistenMenu?.();
 });
 async function menuAction(action: string) {
-  if (store.busy || searchOpen.value || settingsOpen.value || confirmingClose.value) return;
+  if (store.busy || settingsOpen.value || confirmingClose.value) return;
   if (action === 'search') {
     if (store.primary) await openSearch();
-  } else if (action === 'settings') await openSettings();
+  } else if (action === 'directory') await openDirectory('directory');
+  else if (action === 'settings') await openSettings();
   else if (action === 'refresh-directory') await store.refreshDirectory();
   else if (action === 'close-workspace') {
     if (store.primary) await askClose();
   } else if (action === 'primary') {
-    if (store.primary) await store.select('primary');
+    if (store.primary) await selectSession('primary');
   } else if (action === 'previous' || action === 'next') {
     const sessions = store.state.sessions;
     if (!sessions.length) return;
     const index = sessions.findIndex((session) => session.id === store.state.active);
     const next = (index + (action === 'next' ? 1 : -1) + sessions.length) % sessions.length;
-    await store.select(sessions[next].id);
+    await selectSession(sessions[next].id);
   }
 }
-function startDrag(event: MouseEvent) {
-  if (event.button === 0 && isTauriRuntime())
-    void desktopCommand('drag_window').catch(store.report);
+async function selectSession(id: string) {
+  page.value = 'browser';
+  await store.select(id);
 }
 async function hideNative() {
   if (isTauriRuntime()) await resizeBrowser({ x: 0, y: 0, width: 0, height: 0 }, false);
 }
 async function openSearch() {
+  await openDirectory('search');
+}
+async function openDirectory(mode: 'search' | 'directory') {
   if (!(await store.run(() => desktopCommand('check_primary_access')))) return;
   try {
     await hideNative();
-    searchOpen.value = true;
+    page.value = mode;
   } catch (reason) {
     store.report(reason);
   }
@@ -212,21 +214,21 @@ async function closeWorkspace() {
 </script>
 
 <template>
-  <div class="workspace-shell" :class="{ 'sidebar-collapsed': collapsed, 'is-mac': isMac }">
-    <header class="native-titlebar" @mousedown="startDrag">
-      <span>兰谷多账号工具</span><small>多账号工作区</small>
-    </header>
+  <div class="workspace-shell" :class="{ 'sidebar-collapsed': collapsed }">
     <nav class="app-rail" aria-label="功能导航">
       <button
-        class="rail-button active"
+        class="rail-button"
+        :class="{ active: page === 'browser' }"
         title="账号工作区"
         aria-label="账号工作区"
-        @click="collapsed = !collapsed"
+        :disabled="store.busy"
+        @click="page = 'browser'"
       >
         <Users :size="21" />
       </button>
       <button
         class="rail-button"
+        :class="{ active: page === 'search' }"
         title="搜索 / 添加账号（⌘/Ctrl+Shift+K）"
         aria-label="搜索或添加账号"
         :disabled="!store.primary || store.busy"
@@ -236,12 +238,11 @@ async function closeWorkspace() {
       </button>
       <button
         class="rail-button"
-        :title="
-          store.state.directory.error || `刷新用户缓存 · 已缓存 ${store.state.directory.count} 人`
-        "
-        aria-label="刷新用户缓存"
-        :disabled="!store.authorized || store.state.directory.syncing || store.busy"
-        @click="store.refreshDirectory"
+        :class="{ active: page === 'directory' }"
+        :title="`用户列表 · 已缓存 ${store.state.directory.count} 人`"
+        aria-label="用户列表"
+        :disabled="!store.authorized || store.busy"
+        @click="openDirectory('directory')"
       >
         <Database :size="20" :class="{ spinning: store.state.directory.syncing }" />
       </button>
@@ -274,7 +275,7 @@ async function closeWorkspace() {
           :title="`${primaryName} · ${primaryStatus()}`"
           :aria-label="`主账号，${primaryStatus()}`"
           :aria-pressed="store.state.active === 'primary'"
-          @click="store.select('primary')"
+          @click="selectSession('primary')"
         >
           <AccountAvatar :src="store.primary?.account?.avatar" primary />
           <span class="account-text">
@@ -329,7 +330,7 @@ async function closeWorkspace() {
             class="account-item"
             :disabled="store.busy || !store.authorized"
             :title="session.account?.username"
-            @click="store.select(session.id)"
+            @click="selectSession(session.id)"
           >
             <AccountAvatar
               :src="session.account?.avatar"
@@ -396,7 +397,13 @@ async function closeWorkspace() {
           <X :size="16" />
         </button>
       </div>
-      <section v-if="store.active && gateBlocked" class="access-gate" role="status">
+      <UserDirectoryView
+        v-if="page !== 'browser' && store.authorized"
+        :mode="page"
+        @close="page = 'browser'"
+        @opened="page = 'browser'"
+      />
+      <section v-else-if="store.active && gateBlocked" class="access-gate" role="status">
         <ShieldAlert :size="32" />
         <h2>{{ store.state.access.message }}</h2>
         <div v-if="store.state.access.status !== 'checking'" class="form-actions">
@@ -509,23 +516,13 @@ async function closeWorkspace() {
         <div ref="browserHost" class="browser-host">
           <div class="empty-state">
             <Globe2 :size="34" /><span>{{
-              searchOpen || confirmingClose ? '账号页面已暂时隐藏' : '正在打开账号页面…'
+              confirmingClose ? '账号页面已暂时隐藏' : '正在打开账号页面…'
             }}</span>
           </div>
         </div>
-        <footer class="browser-status">
-          <span
-            ><ShieldCheck :size="13" />{{
-              store.active.role === 'primary'
-                ? `${primaryName} · ${primaryStatus()}`
-                : store.active.account?.username
-            }}</span
-          ><span class="page-title">{{ store.active.title }}</span>
-        </footer>
       </template>
       <SettingsView v-else />
     </main>
-    <UserSearchDialog v-if="searchOpen" @close="searchOpen = false" />
     <dialog
       ref="settingsDialog"
       class="confirm-dialog settings-summary"

@@ -26,8 +26,9 @@
 5. GET 的 `_t` 由原站 Axios 拦截器在签名后添加，故不参与签名。
 
 请求签名在服务器时间接口失败时使用本机时间；目录同步游标必须取得服务器时间，失败时保留旧游标。HTTP 请求超时、401、403 和业务失败单独反馈。
-目录首次与全量校准使用 column=id、order=asc、pageNo、pageSize=200。启动增量分别查询 createTime_begin/end 和 updateTime_begin/end，按对应时间字段与 id 升序，范围使用服务器时钟和两分钟重叠。
-服务端权限决定目录范围；完整同步后事务提交。检测到分页重复、数量变化或接口失败时保留旧快照，稍后重试。普通列表没有删除变化流，手动或每日全量校准处理删除与部门字典变动。
+目录所有请求固定 status=1，仅拉取正常账号。首次与全量校准使用 column=id、order=asc、pageNo、pageSize=200。启动增量分别查询 createTime_begin/end 和 updateTime_begin/end，按对应时间字段与 id 升序，范围使用服务器时钟和两分钟重叠。
+增量完成后使用 status=1、field=id 分页校准正常账号集合，移除冻结、离职、删除或失去可见权限的缓存账号；不拉取这些账号的详情。旧缓存读取、搜索与落盘同样排除非正常状态。手动或每日全量校准还会更新部门字典变化。
+服务端权限决定目录范围；合并增量与正常 ID 集合后，以事务替换该主账号的本地快照。检测到分页重复、数量变化或接口失败时保留旧快照和游标，稍后重试。
 本地 search_users 返回每页 20 条展示字段，支持姓名、账号、工号、实际部门、拼音和多关键词。实际部门使用 realDepart_dictText，orgCodeTxt 为权限部门。
 
 ## 响应契约
@@ -80,7 +81,7 @@
 workspace_init、save_settings、open_primary、sync_sessions、search_users、add_account、
 select_session、browser_bounds、browser_action、close_session、close_workspace。
 权限/恢复命令：check_primary_access、relogin_primary、relogin_session。
-缓存/窗口命令：refresh_directory、drag_window。
+缓存命令：refresh_directory。拖动、缩放使用操作系统原生标题栏，不额外开放窗口命令。
 每个命令校验 main 来源；跨窗口显示信息通过仅发给 main 的 workspace-changed 事件同步。
 settings 不接受 token 字段，搜索/代登录也不接受由 Vue 提交的管理 token。
 

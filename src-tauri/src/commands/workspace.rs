@@ -106,15 +106,6 @@ pub async fn refresh_directory(
 }
 
 #[tauri::command]
-pub async fn drag_window(caller: Webview, app: AppHandle) -> AppResult<()> {
-    service::trusted(&caller)?;
-    app.get_window("main")
-        .ok_or_else(|| AppError::Message("主窗口不可用".into()))?
-        .start_dragging()?;
-    Ok(())
-}
-
-#[tauri::command]
 pub async fn check_primary_access(
     caller: Webview,
     app: AppHandle,
