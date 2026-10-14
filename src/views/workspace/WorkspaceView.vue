@@ -18,7 +18,6 @@ import {
   LogOut,
   Search,
   Minus,
-  Users,
 } from 'lucide-vue-next';
 import AccountAvatar from '@/components/account/AccountAvatar.vue';
 import UserSearchDialog from '@/components/account/UserSearchDialog.vue';
@@ -210,37 +209,7 @@ async function closeWorkspace() {
 
 <template>
   <div class="workspace-shell" :class="{ 'sidebar-collapsed': collapsed }">
-    <nav class="app-rail" aria-label="功能导航">
-      <button
-        class="rail-button active"
-        title="账号工作区"
-        aria-label="账号工作区"
-        :disabled="store.busy"
-        @click="searchOpen = false"
-      >
-        <Users :size="21" />
-      </button>
-      <span class="rail-spacer" />
-      <button
-        class="rail-button"
-        title="系统设置"
-        aria-label="系统设置"
-        :disabled="store.busy"
-        @click="openSettings"
-      >
-        <Settings2 :size="20" />
-      </button>
-      <button
-        class="rail-button"
-        title="关闭工作区"
-        aria-label="关闭工作区"
-        :disabled="!store.primary || store.busy"
-        @click="askClose"
-      >
-        <LogOut :size="20" />
-      </button>
-    </nav>
-    <aside class="account-sidebar">
+    <aside class="account-sidebar" aria-label="账号与工作区">
       <div class="sidebar-header" :class="{ active: store.state.active === 'primary' }">
         <button
           class="account-item primary-profile"
@@ -343,6 +312,26 @@ async function closeWorkspace() {
         <div v-if="!store.secondary.length" class="sidebar-empty">暂无子账号</div>
         <div v-else-if="!filtered.length" class="sidebar-empty">没有匹配的账号</div>
       </div>
+      <nav class="sidebar-footer" aria-label="工作区操作">
+        <button
+          class="sidebar-command"
+          title="系统设置"
+          aria-label="系统设置"
+          :disabled="store.busy"
+          @click="openSettings"
+        >
+          <Settings2 :size="18" /><span>设置</span>
+        </button>
+        <button
+          class="sidebar-command"
+          title="关闭工作区"
+          aria-label="关闭工作区"
+          :disabled="!store.primary || store.busy"
+          @click="askClose"
+        >
+          <LogOut :size="18" /><span>关闭</span>
+        </button>
+      </nav>
     </aside>
     <main class="workspace-main">
       <div v-if="store.state.access.status === 'expired'" class="message error" role="alert">
