@@ -128,6 +128,10 @@ pub fn schedule(
         if directory.scope != scope || directory.key != key {
             *directory = DirectoryState {
                 scope: scope.clone(),
+                status: DirectoryStatus {
+                    scope: scope.clone(),
+                    ..Default::default()
+                },
                 key,
                 generation: directory.generation + 1,
                 ..Default::default()

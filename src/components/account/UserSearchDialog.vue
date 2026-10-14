@@ -1,7 +1,16 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import { Search, X, ChevronLeft, ChevronRight, ArrowUpRight, RefreshCw } from 'lucide-vue-next';
+import {
+  Search,
+  X,
+  ChevronLeft,
+  ChevronRight,
+  ArrowUpRight,
+  RefreshCw,
+  History,
+} from 'lucide-vue-next';
 import { searchUsers, desktopCommand } from '@/api/workspace';
+import { readSearchHistory, saveSearchHistory } from '@/api/searchHistory';
 import { useWorkspaceStore } from '@/stores/workspace';
 import type { Account, UserPage } from '@/types/workspace';
 import AccountAvatar from '@/components/account/AccountAvatar.vue';
@@ -12,6 +21,10 @@ const dialog = ref<HTMLDialogElement>();
 const list = ref<HTMLElement>();
 const input = ref<HTMLInputElement>();
 const keyword = ref('');
+const history = ref<string[]>([]);
+const composing = ref(false);
+let historyScope = '';
+let completedQuery = '';
 const page = ref(1);
 const result = ref<UserPage>({ records: [], total: 0, page: 1, pageSize: 20 });
 const selected = ref<Account>();
@@ -20,6 +33,7 @@ const submitting = ref(false);
 const error = ref('');
 let generation = 0;
 let timer: ReturnType<typeof setTimeout> | undefined;
+let historyTimer: ReturnType<typeof setTimeout> | undefined;
 const pages = computed(() => Math.max(1, Math.ceil(result.value.total / result.value.pageSize)));
 const existing = (user: Account) =>
   store.state.sessions.some((s) => s.account?.username === user.username);
@@ -34,7 +48,44 @@ const emptyMessage = computed(() => {
   return keyword.value.trim() ? '没有找到匹配的用户' : '暂无正常状态用户，请刷新用户缓存';
 });
 function close() {
-  if (!submitting.value) emit('close');
+  if (!submitting.value && !composing.value) emit('close');
+}
+function updateHistory(terms: string[]) {
+  try {
+    history.value = saveSearchHistory(historyScope, terms);
+  } catch {
+    store.report('无法保存搜索历史，请检查本地存储空间');
+  }
+}
+function rememberSearch() {
+  clearTimeout(historyTimer);
+  if (completedQuery && completedQuery === keyword.value.trim()) {
+    updateHistory([completedQuery, ...history.value]);
+    completedQuery = '';
+  }
+}
+function removeHistory(term?: string) {
+  // A deleted term must not be added back when the dialog closes.
+  if (!term || completedQuery.toLowerCase() === term.toLowerCase()) {
+    clearTimeout(historyTimer);
+    completedQuery = '';
+  }
+  updateHistory(term ? history.value.filter((item) => item !== term) : []);
+}
+function useHistory(term: string) {
+  rememberSearch();
+  keyword.value = term;
+  input.value?.focus();
+}
+function onSearchKeydown(event: KeyboardEvent) {
+  if (event.isComposing || composing.value || event.keyCode === 229) return;
+  if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+    event.preventDefault();
+    void moveSelection(event.key === 'ArrowDown' ? 1 : -1);
+  } else if (event.key === 'Enter') {
+    event.preventDefault();
+    void add();
+  }
 }
 async function search(nextPage = 1) {
   clearTimeout(timer);
@@ -42,12 +93,16 @@ async function search(nextPage = 1) {
   loading.value = true;
   error.value = '';
   selected.value = undefined;
+  const query = keyword.value.trim();
   try {
-    const response = await searchUsers(keyword.value, nextPage);
+    const response = await searchUsers(query, nextPage);
     if (current === generation) {
       result.value = response;
       page.value = response.page;
       selected.value = response.records[0];
+      completedQuery = query;
+      clearTimeout(historyTimer);
+      historyTimer = setTimeout(rememberSearch, 1000);
     }
   } catch (reason) {
     if (current === generation) {
@@ -59,12 +114,24 @@ async function search(nextPage = 1) {
   }
 }
 watch(keyword, () => {
+  clearTimeout(historyTimer);
   generation++;
   selected.value = undefined;
   loading.value = true;
   clearTimeout(timer);
   timer = setTimeout(() => void search(), 120);
 });
+watch(
+  () => store.state.directory.scope,
+  (scope) => {
+    clearTimeout(historyTimer);
+    generation++;
+    historyScope = scope;
+    history.value = readSearchHistory(scope);
+    completedQuery = '';
+  },
+  { immediate: true },
+);
 watch(
   () => store.state.directory.lastSync,
   () => void search(),
@@ -83,9 +150,16 @@ async function add(user = selected.value) {
   submitting.value = true;
   error.value = '';
   try {
-    if (await store.run(() => desktopCommand('add_account', { username: user.username })))
+    const session = store.state.sessions.find((item) => item.account?.username === user.username);
+    const opened = await store.run(() =>
+      session
+        ? desktopCommand('select_session', { id: session.id })
+        : desktopCommand('add_account', { username: user.username }),
+    );
+    if (opened) {
+      rememberSearch();
       emit('opened');
-    else error.value = store.error;
+    } else error.value = store.error;
   } finally {
     submitting.value = false;
   }
@@ -96,6 +170,7 @@ onMounted(() => {
   void search();
 });
 onBeforeUnmount(() => {
+  rememberSearch();
   dialog.value?.close();
   generation++;
   clearTimeout(timer);
@@ -124,7 +199,7 @@ onBeforeUnmount(() => {
         <X :size="20" />
       </button>
     </header>
-    <form class="user-search" @submit.prevent="add()">
+    <div class="user-search" role="search">
       <div class="input-icon">
         <Search :size="18" /><input
           ref="input"
@@ -133,11 +208,32 @@ onBeforeUnmount(() => {
           placeholder="试试「张三」「zhangsan」「zs」或「财务 张」"
           :disabled="submitting"
           maxlength="100"
-          @keydown.down.prevent="moveSelection(1)"
-          @keydown.up.prevent="moveSelection(-1)"
+          @compositionstart="composing = true"
+          @compositionend="composing = false"
+          @keydown="onSearchKeydown"
         />
       </div>
-    </form>
+    </div>
+    <section v-if="history.length" class="search-history" aria-label="最近搜索">
+      <div class="history-heading">
+        <span><History :size="13" />最近搜索</span>
+        <button class="text-button" :disabled="submitting" @click="removeHistory()">
+          清空历史
+        </button>
+      </div>
+      <div class="history-terms">
+        <span v-for="term in history" :key="term" class="history-term">
+          <button :disabled="submitting" :title="term" @click="useHistory(term)">{{ term }}</button>
+          <button
+            :disabled="submitting"
+            :aria-label="`删除搜索记录：${term}`"
+            @click="removeHistory(term)"
+          >
+            <X :size="12" />
+          </button>
+        </span>
+      </div>
+    </section>
     <div class="directory-status" role="status">
       <span v-if="store.state.directory.syncing"
         ><RefreshCw :size="13" class="spinning" />正在同步 {{ store.state.directory.fetched }} /

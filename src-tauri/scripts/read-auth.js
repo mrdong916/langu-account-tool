@@ -1,5 +1,6 @@
 function readLanguAuth(expectedOrigin) {
-  if (location.origin !== expectedOrigin || window !== window.top) return null;
+  // false means this page cannot answer; null means this origin has no valid login.
+  if (location.origin !== expectedOrigin || window !== window.top) return false;
   const get = (key) => {
     try {
       const entry = JSON.parse(localStorage.getItem('pro__' + key));

@@ -24,6 +24,7 @@
 账号页面工具栏的扳手打开该账号 WebView 的开发者工具。
 
 构建结果会复制到 `work/installers/<Rust目标>/release/`，文件名使用“兰谷多账号工具”。
+本地脚本在构建前仅清理本次格式对应的原始安装包目录，保留编译缓存和此前导出的安装包；构建成功后逐格式校验，缺失或出现多个安装包时停止复制，避免旧包覆盖新版。脚本不接受覆盖 target、bundles、profile 或 target-dir 的参数；需要自定义这些选项时直接使用 `npx tauri build`。
 Mac 输出 APP 和 DMG；中文名称 DMG 会同时复制到归档目录。
 原始 Tauri 产物位于 `src-tauri/target/<Rust目标>/release/bundle/`。
 可加 `--debug` 生成包含调试信息的安装包，对应目录为 `debug`；例如 `npm run tauri:build:mac:arm -- --debug --ci`。

@@ -5,6 +5,8 @@ pub type AppResult<T> = Result<T, AppError>;
 
 #[derive(Debug, Error)]
 pub enum AppError {
+    #[error("主账号正在浏览外部页面，请返回系统首页后重试")]
+    AuthUnavailable,
     #[error("登录已过期，请重新登录主账号")]
     Unauthorized,
     #[error("暂无权限")]

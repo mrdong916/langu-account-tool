@@ -9,6 +9,7 @@ export const defaultSettings: Settings = {
   username: '',
 };
 export const emptyDirectory = {
+  scope: '',
   syncing: false,
   count: 0,
   fetched: 0,

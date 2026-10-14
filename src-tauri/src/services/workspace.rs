@@ -80,7 +80,10 @@ pub fn position(app: &AppHandle) -> AppResult<()> {
             if visible
                 && (access == AccessStatus::Ready
                     || (id == "primary"
-                        && matches!(access, AccessStatus::Pending | AccessStatus::Expired)))
+                        && matches!(
+                            access,
+                            AccessStatus::Pending | AccessStatus::Away | AccessStatus::Expired
+                        )))
                 && active.as_deref() == Some(&id)
                 && bounds.width > 0.0
                 && bounds.height > 0.0
@@ -326,13 +329,20 @@ pub async fn read_auth(app: &AppHandle, id: &str) -> AppResult<Option<Value>> {
         serde_json::to_string(&expected)?
     );
     let value = eval_value(&view, script).await?;
+    if value == Value::Bool(false) {
+        return Err(AppError::AuthUnavailable);
+    }
     Ok(if value.is_object() { Some(value) } else { None })
 }
 
 pub async fn credential(app: &AppHandle) -> AppResult<Credential> {
-    let auth = read_auth(app, "primary")
-        .await?
-        .ok_or(AppError::Unauthorized)?;
+    let auth = match read_auth(app, "primary").await {
+        Err(AppError::AuthUnavailable) => {
+            pause_external_page(app)?;
+            return Err(AppError::AuthUnavailable);
+        }
+        result => result?.ok_or(AppError::Unauthorized)?,
+    };
     Ok(Credential::from_auth(&auth))
 }
 
@@ -363,13 +373,29 @@ fn set_access(app: &AppHandle, status: AccessStatus, message: &str) -> AppResult
                 AccessStatus::Denied => "denied",
                 AccessStatus::Checking => "checking",
                 AccessStatus::Unavailable => "error",
-                AccessStatus::Pending => "pending",
+                AccessStatus::Pending | AccessStatus::Away => "pending",
             }
             .into();
         }
     }
     position(app)?;
     publish(app);
+    Ok(())
+}
+
+fn pause_external_page(app: &AppHandle) -> AppResult<()> {
+    let status = app.state::<AppState>().lock()?.access.status;
+    // Leaving the site must not erase a server rejection or mark a valid token expired.
+    if !matches!(
+        status,
+        AccessStatus::Away | AccessStatus::Expired | AccessStatus::Denied
+    ) {
+        set_access(
+            app,
+            AccessStatus::Away,
+            "主账号正在浏览外部页面，返回系统首页后自动恢复账号管理",
+        )?;
+    }
     Ok(())
 }
 
@@ -410,7 +436,13 @@ async fn check_primary(app: &AppHandle, force: bool) -> AppResult<()> {
     {
         return Ok(());
     }
-    let auth = read_auth(app, "primary").await?;
+    let auth = match read_auth(app, "primary").await {
+        Err(AppError::AuthUnavailable) => {
+            pause_external_page(app)?;
+            return Ok(());
+        }
+        result => result?,
+    };
     let Some(auth) = auth else {
         let previous = app.state::<AppState>().lock()?.access.status;
         if previous != AccessStatus::Pending && previous != AccessStatus::Expired {
@@ -435,7 +467,7 @@ async fn check_primary(app: &AppHandle, force: bool) -> AppResult<()> {
     if changed_owner {
         close_children(app)?;
     }
-    if !needs_check {
+    if !needs_check && !changed_owner {
         // Foreground operations may refresh permission checks, but never postpone keepalive.
         if heartbeat_due && app.state::<AppState>().lock()?.access.ready() {
             app.state::<AppState>().lock()?.access.heartbeat_at = Some(std::time::Instant::now());
@@ -459,14 +491,18 @@ async fn check_primary(app: &AppHandle, force: bool) -> AppResult<()> {
         ws.access.checked_at = Some(std::time::Instant::now());
     }
     // Do not hide a previously authorized view while performing a routine recheck.
-    if !app.state::<AppState>().lock()?.access.ready() || changed_key {
+    if !app.state::<AppState>().lock()?.access.ready() || changed_key || changed_owner {
         set_access(app, AccessStatus::Checking, "正在校验主账号权限")?;
     }
     update_session(app, "primary", |s| {
         s.account = Some(account.clone());
     });
     let result = langu::check_permission(&config, &credential).await;
-    if self::credential(app).await.ok().as_ref() != Some(&credential) {
+    let current = self::credential(app).await;
+    if matches!(current, Err(AppError::AuthUnavailable)) {
+        return Err(AppError::AuthUnavailable);
+    }
+    if current.ok().as_ref() != Some(&credential) {
         set_access(
             app,
             AccessStatus::Pending,
@@ -513,6 +549,9 @@ async fn check_primary(app: &AppHandle, force: bool) -> AppResult<()> {
 
 pub async fn authorized_primary(app: &AppHandle) -> AppResult<Credential> {
     check_primary(app, true).await?;
+    if app.state::<AppState>().lock()?.access.status == AccessStatus::Away {
+        return Err(AppError::AuthUnavailable);
+    }
     if !app.state::<AppState>().lock()?.access.ready() {
         select(app, "primary".into())?;
         return Err(AppError::Message("请先登录有权限的主账号".into()));
@@ -523,12 +562,14 @@ pub async fn authorized_primary(app: &AppHandle) -> AppResult<Credential> {
 }
 
 pub async fn ensure_primary(app: &AppHandle, expected: &Credential) -> AppResult<()> {
-    let current = credential(app).await.ok();
-    if current.is_none() {
-        handle_primary_error(app, &AppError::Unauthorized).await?;
-        return Err(AppError::Unauthorized);
-    }
-    if current.as_ref() != Some(expected) {
+    let current = match credential(app).await {
+        Ok(current) => current,
+        Err(error) => {
+            handle_primary_error(app, &error).await?;
+            return Err(error);
+        }
+    };
+    if &current != expected {
         set_access(
             app,
             AccessStatus::Pending,

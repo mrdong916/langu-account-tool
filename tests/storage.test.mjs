@@ -42,12 +42,22 @@ test('primary expiry clears only auth and never another origin or child profile'
 test('credentials are neither injected nor read at another origin or inside an iframe', () => {
   const { sandbox, cache } = context('http://other.example');
   assert.equal(sandbox.bootstrapLanguAccount('http://languwin.com', payload), false);
-  assert.equal(sandbox.readLanguAuth('http://languwin.com'), null);
+  assert.equal(sandbox.readLanguAuth('http://languwin.com'), false);
   assert.equal(cache.size, 0);
   sandbox.location.origin = 'http://languwin.com';
   sandbox.window.top = {};
   assert.equal(sandbox.bootstrapLanguAccount('http://languwin.com', payload), false);
+  assert.equal(sandbox.readLanguAuth('http://languwin.com'), false);
   assert.equal(cache.size, 0);
+});
+
+test('leaving the login origin is temporary and returning preserves the original login', () => {
+  const { sandbox } = context();
+  sandbox.bootstrapLanguAccount('http://languwin.com', payload);
+  sandbox.location.origin = 'https://external.example';
+  assert.equal(sandbox.readLanguAuth('http://languwin.com'), false);
+  sandbox.location.origin = 'http://languwin.com';
+  assert.equal(sandbox.readLanguAuth('http://languwin.com').user.username, 'test.child');
 });
 
 test('expired storage, expired JWT, and malformed login state cannot authorize account search', () => {

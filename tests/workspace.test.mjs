@@ -1,7 +1,7 @@
 import test, { after, before } from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer } from 'vite';
-import { createSSRApp, ref } from 'vue';
+import { createSSRApp, ref, nextTick } from 'vue';
 import { renderToString } from 'vue/server-renderer';
 import { createPinia } from 'pinia';
 
@@ -9,14 +9,22 @@ let server;
 let WorkspaceView;
 let useWorkspaceStore;
 let useNativeBrowser;
+let historyApi, Dialog;
+const storage = new Map();
 const previousStorage = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
 
 before(async () => {
   Object.defineProperty(globalThis, 'localStorage', {
     configurable: true,
-    value: { getItem: () => null },
+    value: {
+      getItem: (key) => storage.get(key) ?? null,
+      setItem: (key, value) => storage.set(key, value),
+      removeItem: (key) => storage.delete(key),
+    },
   });
   server = await createServer({ server: { middlewareMode: true, hmr: false, watch: null } });
+  historyApi = await server.ssrLoadModule('/src/api/searchHistory.ts');
+  Dialog = (await server.ssrLoadModule('/src/components/account/UserSearchDialog.vue')).default;
   WorkspaceView = (await server.ssrLoadModule('/src/views/workspace/WorkspaceView.vue')).default;
   ({ useWorkspaceStore } = await server.ssrLoadModule('/src/stores/workspace.ts'));
   ({ useNativeBrowser } = await server.ssrLoadModule('/src/hooks/useNativeBrowser.ts'));
@@ -118,7 +126,7 @@ test('add-account opens search only for an authorized primary, without separate 
   assert.match(ready, /aria-label="添加子账号"(?! disabled)/);
   assert.ok(!ready.includes('lucide-database'));
   assert.ok(!ready.includes('aria-label="搜索账号"'));
-  for (const status of ['pending', 'checking', 'denied', 'expired', 'unavailable']) {
+  for (const status of ['pending', 'away', 'checking', 'denied', 'expired', 'unavailable']) {
     const html = await renderWorkspace({ status });
     assert.match(html, /aria-label="添加子账号" disabled/);
   }
@@ -167,5 +175,124 @@ test('native browser restores without animation frames and skips unchanged bound
       if (descriptor) Object.defineProperty(globalThis, key, descriptor);
       else delete globalThis[key];
     }
+  }
+});
+
+test('search history persists by owner, deduplicates, limits and recovers malformed data', () => {
+  const { saveSearchHistory, readSearchHistory } = historyApi;
+  saveSearchHistory('owner-a', [
+    '  ZS  ',
+    'zs',
+    ' 财务  张 ',
+    '',
+    ...Array.from({ length: 15 }, (_, i) => `query-${i}`),
+  ]);
+  assert.deepEqual(readSearchHistory('owner-a').slice(0, 2), ['ZS', '财务 张']);
+  assert.equal(readSearchHistory('owner-a').length, 12);
+  assert.deepEqual(readSearchHistory('owner-b'), []);
+  saveSearchHistory('owner-b', ['李四']);
+  saveSearchHistory('owner-a', []);
+  assert.deepEqual(readSearchHistory('owner-a'), []);
+  assert.deepEqual(readSearchHistory('owner-b'), ['李四']);
+  storage.set('langu-search-history:owner-a', 'invalid-json');
+  assert.deepEqual(readSearchHistory('owner-a'), []);
+  storage.set(
+    'langu-search-history:owner-a',
+    JSON.stringify([{}, null, 123, 'valid', 'a'.repeat(101)]),
+  );
+  assert.deepEqual(readSearchHistory('owner-a'), ['valid']);
+  assert.deepEqual(saveSearchHistory('', ['unscoped']), []);
+});
+
+test('search keyboard leaves IME arrows and confirmation to the input method', async () => {
+  let model;
+  const app = createSSRApp({
+    setup() {
+      model = Dialog.setup({}, { expose() {}, emit() {} });
+      return () => null;
+    },
+  });
+  app.use(createPinia());
+  await renderToString(app);
+  const first = { id: '1', username: 'one' },
+    second = { id: '2', username: 'two' };
+  model.result.value.records = [first, second];
+  model.selected.value = model.result.value.records[0];
+  model.loading.value = false;
+  for (const key of ['ArrowDown', 'ArrowUp', 'Enter']) {
+    for (const mode of ['event', 'composition', 'webkit']) {
+      model.composing.value = mode === 'composition';
+      let prevented = false;
+      model.onSearchKeydown({
+        key,
+        isComposing: mode === 'event',
+        keyCode: mode === 'webkit' ? 229 : 0,
+        preventDefault() {
+          prevented = true;
+        },
+      });
+      assert.equal(prevented, false);
+      assert.equal(model.selected.value.id, '1');
+      assert.equal(model.submitting.value, false);
+    }
+  }
+  model.composing.value = false;
+  let prevented = false;
+  model.onSearchKeydown({
+    key: 'ArrowDown',
+    preventDefault() {
+      prevented = true;
+    },
+  });
+  await nextTick();
+  assert.equal(prevented, true);
+  assert.equal(model.selected.value.id, '2');
+});
+
+test('completed searches can be recalled and cleared; existing accounts use fast switching', async () => {
+  const previousWindow = Object.getOwnPropertyDescriptor(globalThis, 'window');
+  const commands = [];
+  const user = { id: 'fixture-user', username: 'fixture.user' };
+  Object.defineProperty(globalThis, 'window', {
+    configurable: true,
+    value: {
+      __TAURI_INTERNALS__: {
+        invoke: async (command, args) => {
+          commands.push({ command, args });
+          if (command === 'search_users')
+            return { records: [user], total: 1, page: 1, pageSize: 20 };
+        },
+      },
+    },
+  });
+  let model;
+  try {
+    const app = createSSRApp({
+      setup() {
+        const store = useWorkspaceStore();
+        store.state.directory.scope = 'integration-owner';
+        store.state.sessions = [{ id: 'existing-view', account: user }];
+        model = Dialog.setup({}, { expose() {}, emit() {} });
+        return () => null;
+      },
+    });
+    app.use(createPinia());
+    await renderToString(app);
+    model.keyword.value = ' 张三 ';
+    await model.search();
+    model.rememberSearch();
+    assert.deepEqual(historyApi.readSearchHistory('integration-owner'), ['张三']);
+    model.useHistory('张三');
+    assert.equal(model.keyword.value, '张三');
+    model.removeHistory('张三');
+    model.rememberSearch();
+    assert.deepEqual(historyApi.readSearchHistory('integration-owner'), []);
+    await model.add();
+    assert.deepEqual(commands.at(-1), { command: 'select_session', args: { id: 'existing-view' } });
+    assert.ok(!commands.some(({ command }) => command === 'add_account'));
+  } finally {
+    model?.rememberSearch();
+    if (previousWindow) Object.defineProperty(globalThis, 'window', previousWindow);
+    else delete globalThis.window;
   }
 });

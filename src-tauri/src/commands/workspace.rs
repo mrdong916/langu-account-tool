@@ -227,18 +227,13 @@ pub async fn add_account(
 }
 
 #[tauri::command]
-pub async fn select_session(
-    caller: Webview,
-    app: AppHandle,
-    state: State<'_, AppState>,
-    id: String,
-) -> AppResult<()> {
+pub async fn select_session(caller: Webview, app: AppHandle, id: String) -> AppResult<()> {
     service::trusted(&caller)?;
-    let _guard = state.operations.lock().await;
-    service::sync_primary(&app).await?;
+    // Selecting an existing view uses the current gate. The background loop keeps
+    // checking auth and heartbeats without holding up navigation on a network call.
     service::select(&app, id.clone())?;
     service::update_session(&app, &id, |s| s.validated_at = None);
-    service::sync_active(&app).await
+    Ok(())
 }
 
 #[tauri::command]

@@ -32,11 +32,12 @@ export interface WorkspaceSnapshot {
   sessions: Session[];
   active: string | null;
   access: {
-    status: 'pending' | 'checking' | 'ready' | 'denied' | 'expired' | 'unavailable';
+    status: 'pending' | 'away' | 'checking' | 'ready' | 'denied' | 'expired' | 'unavailable';
     message: string;
   };
 }
 export interface DirectoryStatus {
+  scope: string;
   syncing: boolean;
   count: number;
   fetched: number;

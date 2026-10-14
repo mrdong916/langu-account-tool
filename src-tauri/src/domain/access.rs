@@ -8,6 +8,7 @@ pub const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(5 * 60);
 pub enum AccessStatus {
     #[default]
     Pending,
+    Away,
     Checking,
     Ready,
     Denied,
@@ -49,6 +50,7 @@ impl PrimaryAccess {
             HEARTBEAT_INTERVAL
         };
         force
+            || self.status == AccessStatus::Away
             || self
                 .checked_at
                 .is_none_or(|time| time.elapsed() >= interval)
@@ -75,6 +77,9 @@ mod tests {
         assert!(!gate.needs_check("old", false));
         assert!(gate.needs_check("old", true));
         assert!(gate.needs_check("new", false));
+        gate.status = AccessStatus::Away;
+        assert!(!gate.ready());
+        assert!(gate.needs_check("old", false));
         gate.status = AccessStatus::Expired;
         assert!(!gate.ready());
         assert!(!gate.needs_check("old", true));

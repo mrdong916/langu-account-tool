@@ -339,6 +339,33 @@ async fn check(app: &AppHandle) -> AppResult<()> {
         return Err(AppError::Message("Child login not ready".into()));
     }
     expect_script(&child, "localStorage.getItem('draft') === 'CHILD-DRAFT'").await?;
+    // Existing-session selection must not queue behind background HTTP work.
+    {
+        let state = app.state::<AppState>();
+        let _guard = state.operations.lock().await;
+        for id in ["primary", "smoke-child"] {
+            tokio::time::timeout(
+                Duration::from_secs(1),
+                langu_account_tool_lib::commands::workspace::select_session(
+                    app.get_webview("main").unwrap(),
+                    app.clone(),
+                    id.into(),
+                ),
+            )
+            .await
+            .map_err(|_| {
+                AppError::Message("Account switching waited for background operations".into())
+            })??;
+        }
+    }
+    if app.state::<AppState>().lock()?.sessions["smoke-child"]
+        .validated_at
+        .is_some()
+    {
+        return Err(AppError::Message(
+            "Account switching did not schedule a child recheck".into(),
+        ));
+    }
     let hint = app
         .get_webview("switch-hint")
         .ok_or_else(|| AppError::Message("Switch hint missing".into()))?;
@@ -397,6 +424,50 @@ async fn check(app: &AppHandle) -> AppResult<()> {
     workspace::sync_active(app).await?;
     expect_script(&child, "localStorage.getItem('draft') === 'CHILD-DRAFT'").await?;
     expect_script(&primary, "localStorage.getItem('draft') === 'PRIMARY-DRAFT' && document.getElementById('account')?.textContent === 'Current account: test.admin'").await?;
+    workspace::select(app, "primary".into())?;
+    primary.navigate("http://localhost:1432/second".parse().unwrap())?;
+    expect_script(
+        &primary,
+        "location.origin === 'http://localhost:1432' && document.readyState === 'complete'",
+    )
+    .await?;
+    workspace::sync_primary(app).await?;
+    if app.state::<AppState>().lock()?.access.status
+        != langu_account_tool_lib::domain::access::AccessStatus::Away
+    {
+        return Err(AppError::Message(
+            "External navigation was treated as expired login".into(),
+        ));
+    }
+    if workspace::select(app, "smoke-child".into()).is_ok() {
+        return Err(AppError::Message(
+            "External page could authorize account management".into(),
+        ));
+    }
+    primary.navigate(config.login_url.parse().unwrap())?;
+    expect_script(&primary, "location.origin === 'http://127.0.0.1:1432' && document.getElementById('account')?.textContent === 'Current account: test.admin'").await?;
+    workspace::sync_primary(app).await?;
+    if !app.state::<AppState>().lock()?.access.ready() {
+        return Err(AppError::Message(
+            "Returning from an external page did not restore access".into(),
+        ));
+    }
+    expect_script(
+        &primary,
+        "localStorage.getItem('draft') === 'PRIMARY-DRAFT'",
+    )
+    .await?;
+    expect_script(&child, "localStorage.getItem('draft') === 'CHILD-DRAFT'").await?;
+    fixture("permission", serde_json::json!({"allowed":false})).await?;
+    if workspace::authorized_primary(app).await.is_ok()
+        || workspace::select(app, "smoke-child".into()).is_ok()
+    {
+        return Err(AppError::Message(
+            "Fast switching bypassed a rejected permission check".into(),
+        ));
+    }
+    fixture("permission", serde_json::json!({"allowed":true})).await?;
+    workspace::authorized_primary(app).await?;
     workspace::close_children(app)?;
     workspace::close(app, "primary")
 }

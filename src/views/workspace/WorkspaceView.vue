@@ -69,6 +69,7 @@ function primaryStatus() {
   const status = store.state.access.status;
   return {
     pending: '等待登录',
+    away: '浏览外部页面',
     checking: '正在校验权限',
     ready: '已登录',
     denied: '暂无权限',
@@ -334,6 +335,10 @@ async function closeWorkspace() {
       </nav>
     </aside>
     <main class="workspace-main">
+      <div v-if="store.state.access.status === 'away'" class="message" role="status">
+        {{ store.state.access.message }}
+        <button class="text-button" @click="store.browser('home')">返回系统首页</button>
+      </div>
       <div v-if="store.state.access.status === 'expired'" class="message error" role="alert">
         主账号登录已过期，请重新登录
       </div>

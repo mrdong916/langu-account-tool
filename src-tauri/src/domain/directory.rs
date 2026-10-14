@@ -5,6 +5,7 @@ use serde::Serialize;
 #[derive(Clone, Default, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DirectoryStatus {
+    pub scope: String,
     pub syncing: bool,
     pub count: usize,
     pub fetched: usize,
