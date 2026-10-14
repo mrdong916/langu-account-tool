@@ -35,7 +35,7 @@ pnpm dev
 
 ```text
 langu-account-tool/
-  .github/workflows/   多平台检查、安装包与草稿 Release 流水线
+  .github/workflows/   多平台检查、安装包构建和 GitHub Release 发布
   docs/               产品、架构、协议、平台矩阵
   scripts/            开发/打包入口、本地测试系统
   tests/              登录缓存协议测试
@@ -79,6 +79,22 @@ pnpm build
 ```
 
 平台范围见 [docs/platforms.md](docs/platforms.md)，接入协议见 [docs/api.md](docs/api.md)。
-GitHub Actions 的 `Project checks` 执行三平台检查，`Build desktop installers` 自动构建安装包；使用方式与架构详见 [docs/release.md](docs/release.md)。
-Codeup 仓库尚未配置云效流水线；本地可使用 `scripts/release.ps1` 运行发布检查。
-正式签名、安装包与多架构真机验证需按发布矩阵完成；当前并未宣称所有平台已经验证。
+
+## GitHub 自动构建与发布
+
+`.github/workflows/build.yml` 在每次推送到 GitHub 的 `main` 分支后执行检查、构建安装包，并自动发布到该仓库的 Releases：
+
+- Windows x64 / x86：`.exe`（NSIS）和 `.msi`；ARM64：`.exe`。
+- Linux x64 / ARM64：`.deb`、`.rpm` 和 `.AppImage`。
+- macOS 14+：同时支持 Intel 和 Apple Silicon 的通用 `.dmg`。
+
+检查由可复用的 `check.yml` 执行；构建矩阵和下载说明见 [docs/release.md](docs/release.md)。
+全部平台检查和构建成功后才统一发布；上传阶段使用草稿，安装包上传成功后自动公开，无需手工确认。
+每次执行使用独立标签 `v<应用版本>-build.<运行编号>.<重跑次数>-<短提交号>`，例如 `v0.1.0-build.12.1-5c578d9`，不会覆盖历史版本。
+标签指向本次构建的提交；安装包内部版本沿用项目配置，发布新的应用版本时需同步更新 `package.json`、`src-tauri/tauri.conf.json`、`src-tauri/Cargo.toml` 和锁文件。
+
+Pull Request 只执行检查，不发布 Release；其他分支推送不触发发布。也可在 Actions 的 **Build and release** 中选择 `main` 手动运行。
+发布使用 GitHub 自动提供的 `GITHUB_TOKEN`，仅发布任务申请 `contents: write`，不需要额外配置个人访问令牌。仓库或组织须允许运行这些 Actions 及写入 Releases。
+
+当前本地 `origin` 指向 Codeup。上述自动化需要代码实际推送或镜像同步到 GitHub 仓库；只推送 Codeup 不会触发 GitHub Actions。
+`scripts/release.ps1` 仍用于本地检查和打包。自动构建未配置发行证书签名或 macOS 公证，平台运行与隔离能力仍需按 [平台矩阵](docs/platforms.md) 完成真机验收。

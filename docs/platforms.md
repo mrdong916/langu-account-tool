@@ -45,8 +45,8 @@ pnpm exec tauri build --target universal-apple-darwin
 
 跨 target 前先通过 rustup 安装对应 target 并准备系统工具链。
 不能在一台 Windows 机器上直接生成并验证所有 macOS/Linux 安装包。
-GitHub Actions 提供三平台检查及多架构打包，具体矩阵与产物下载见 [release.md](release.md)。
-本地通过不等于所有平台已发布；安装包生成也不等于会话隔离已经完成真机验收。
+GitHub Actions 在 `main` 每次推送后执行三平台检查和多架构打包，全部成功后自动发布 GitHub Release；具体矩阵与产物下载见 [release.md](release.md)。
+PR 只执行检查；自动化构建成功不等于对应平台已经通过账号隔离和运行功能的真机验收。
 
 macOS 启用开发者工具涉及 WebKit 私有 API；本项目面向企业内部分发，不以 Mac App Store 为目标。
 正式发布还需公司提供签名证书、公证信息并确认最终应用标识；公司图标已配置。

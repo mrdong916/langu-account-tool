@@ -5,8 +5,7 @@
 
 ## 环境
 
-推荐 Node.js 22 LTS、项目指定 pnpm、Rust stable。
-现有 Node.js 18.20.8 可运行此版本，但后续依赖升级应同时升级 Node。
+使用 Node.js 22.13+、项目指定 pnpm、Rust stable。
 Windows 需要 MSVC C++ build tools 与 WebView2 Runtime。
 Linux/macOS 依赖和架构说明见 docs/platforms.md。
 
@@ -32,6 +31,12 @@ cargo test --manifest-path src-tauri/Cargo.toml
 - PR 记录行为变化、验证结果及平台限制。界面改动附截图。
 - 没有业务需求时不预建空服务、数据库或大型 monorepo 子包。
 - 前端格式交给 Prettier；ESLint 检查语义；Rust 使用 rustfmt 和 Clippy。
+
+## 自动发布
+
+GitHub Pull Request 会执行三平台检查。推送到 GitHub `main` 后，工作流通过检查再构建 Windows x64/x86/ARM64、Linux x64/ARM64 和 macOS 通用安装包，所有平台成功后自动创建并发布 GitHub Release。
+Release 标签包含应用版本、运行编号、重跑次数和提交号；不需要先手工打 tag，也不会自动提交版本号变更。手动重跑使用新的 Release 标签。
+工作流和发布权限说明见 [README](README.md#github-自动构建与发布)。推送到 Codeup 本身不会触发这套 GitHub 工作流。
 
 ## 本地会话验收
 
