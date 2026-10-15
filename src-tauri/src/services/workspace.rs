@@ -178,6 +178,7 @@ pub fn create(
     let pending_bootstrap = bootstrap.clone();
     let handle = app.clone();
     let label = id.clone();
+    let navigation_origin = origin.clone();
     builder = builder.on_navigation(move |url| {
         if cfg!(target_os = "macos") && url.as_str() == "about:blank" {
             return true;
@@ -189,7 +190,7 @@ pub fn create(
         if url.path() == crate::infra::macos::BOOTSTRAP_PATH {
             return true;
         }
-        update_session(&handle, &label, |s| s.url = url.to_string());
+        update_session(&handle, &label, |s| s.record_url(url, &navigation_origin));
         true
     });
     let handle = app.clone();
@@ -205,7 +206,7 @@ pub fn create(
             update_session(&handle, &label, |s| {
                 s.loading = event.event() == PageLoadEvent::Started;
                 if !internal_page {
-                    s.url = event.url().to_string();
+                    s.record_url(event.url(), &origin);
                 }
             });
             let can_bootstrap = event.event() == PageLoadEvent::Finished
@@ -268,6 +269,7 @@ pub fn create(
         role: role.into(),
         account,
         url: url.to_string(),
+        return_url: Some(url.clone()),
         title: "正在打开".into(),
         loading: true,
         status: if role == "primary" {
@@ -393,7 +395,7 @@ fn pause_external_page(app: &AppHandle) -> AppResult<()> {
         set_access(
             app,
             AccessStatus::Away,
-            "主账号正在浏览外部页面，返回系统首页后自动恢复账号管理",
+            "主账号正在浏览外部页面，返回原页面后自动恢复账号管理",
         )?;
     }
     Ok(())
@@ -634,8 +636,11 @@ pub async fn sync_active(app: &AppHandle) -> AppResult<()> {
     if url.path() == crate::infra::macos::BOOTSTRAP_PATH {
         return Ok(());
     }
-    update_session(app, &id, |session| session.url = url.to_string());
-    if id != "primary" && url.origin() == http_url(&config.login_url)?.origin() {
+    let login_origin = http_url(&config.login_url)?.origin();
+    update_session(app, &id, |session| {
+        session.record_url(&url, &login_origin.ascii_serialization())
+    });
+    if id != "primary" && url.origin() == login_origin {
         let auth = read_auth(app, &id).await?;
         let current = auth
             .as_ref()

@@ -87,6 +87,8 @@ pub struct Session {
     pub role: String,
     pub account: Option<Account>,
     pub url: String,
+    #[serde(skip)]
+    pub return_url: Option<Url>,
     pub title: String,
     pub loading: bool,
     pub status: String,
@@ -97,6 +99,15 @@ pub struct Session {
     pub auth_key: Option<String>,
     #[serde(skip)]
     pub bootstrap: std::sync::Arc<std::sync::Mutex<Option<serde_json::Value>>>,
+}
+
+impl Session {
+    pub fn record_url(&mut self, url: &Url, login_origin: &str) {
+        self.url = url.to_string();
+        if url.origin().ascii_serialization() == login_origin {
+            self.return_url = Some(url.clone());
+        }
+    }
 }
 
 #[derive(Clone, Copy, Default, Deserialize)]

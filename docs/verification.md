@@ -2,6 +2,12 @@
 
 日期：2026-10-13；环境：Windows x64 / WebView2。
 
+## 外站跳转与返回（2026-10-15）
+
+- 账号 WebView 可打开登录地址以外的 HTTP(S) 站点；macOS 的 ATS 例外只作用于网页内容，HTTPS 证书校验不变。
+- 每个账号在 Rust 内存中记录最近的原站地址，外站工具栏显示“返回原页面”；主账号返回后重新校验权限，子账号保留独立缓存和页面状态。
+- 原生模拟系统验证不同域名的 HTTP 导航及主、子账号分别返回；`external-http` 模式使用解析到本机的独立域名，不访问线上账号。移除新增的 ATS 网页例外时该模式按预期失败。
+
 ## macOS 地址栏与子账号登录修复（2026-10-14）
 
 - macOS 26.4 / Apple Silicon 原生测量：主 WebView 高度 900，而 CSS 视口高度 868，标题栏安全区域为 32。子 WebView 定位改为读取当前父视图的 `safeAreaInsets`，兼容窗口缩放与侧栏宽度变化，不写死标题栏高度。
@@ -14,9 +20,9 @@
 ## macOS 登录页闪退修复（2026-10-14）
 
 - macOS 26.4 原生复现：HTTP 登录页被 ATS 拒绝（`-1022`）后，Wry 0.57.0 的 `url_from_webview` 对空 `WKWebView.URL` 执行 `unwrap()`，后台登录检查使整个应用退出。
-- `Info.plist` 为 `languwin.com` 及其子域添加 HTTP 例外；其他域名仍遵循系统 ATS，HTTPS 证书校验不变。自定义 HTTP 域名需要在安装包中单独配置例外。
+- 当时在 `Info.plist` 中为 `languwin.com` 及其子域添加 HTTP 例外；10 月 15 日起网页内容也可打开其他 HTTP 域名。非网页网络请求仍遵循系统 ATS。
 - 登录读取、清理和当前地址检查改用可超时的脚本求值，避免原生空 URL；登录缓存脚本仍校验完整 origin 和顶层页面。
-- 打包后的原生冒烟测试通过：ATS 拦截首次导航时不退出；兰谷 HTTP 登录页完成加载；本地 test.admin / test.user.01 身份与草稿保持隔离。
+- 打包后的原生冒烟测试通过：无效域名首次导航时不退出；兰谷 HTTP 登录页完成加载；本地 test.admin / test.user.01 身份与草稿保持隔离。
 - TypeScript、ESLint、9 项 Node 测试、前端生产构建、Rust 格式、7 项 Rust 测试及 Clippy 通过。
 
 原生回归入口为 `src-tauri/examples/webview_smoke.rs`，只接受独立的 `com.langu.accounttool.smoke` 标识，不读取已保存账号。
@@ -46,9 +52,10 @@ PY
 LANGU_SMOKE_MODE=blocked 'work/WebView Smoke.app/Contents/MacOS/webview_smoke'
 LANGU_SMOKE_MODE=local 'work/WebView Smoke.app/Contents/MacOS/webview_smoke'
 LANGU_SMOKE_MODE=remote 'work/WebView Smoke.app/Contents/MacOS/webview_smoke'
+LANGU_SMOKE_MODE=external-http 'work/WebView Smoke.app/Contents/MacOS/webview_smoke'
 ```
 
-每次应输出 `WebView smoke passed` 并返回 0。`remote` 仅访问公开登录页，不登录或调用线上管理接口。
+每次应输出 `WebView smoke passed` 并返回 0。`remote` 仅访问公开登录页；`external-http` 使用解析到本机的独立域名访问本地测试系统，再返回模拟账号，不登录或调用线上管理接口。
 
 ## 折叠入口、图标与安装包工作流
 

@@ -47,6 +47,14 @@ const primaryName = computed(() => {
 const gateBlocked = computed(() =>
   ['checking', 'denied', 'unavailable'].includes(store.state.access.status),
 );
+const externalPage = computed(() => {
+  if (!store.active?.url) return false;
+  try {
+    return new URL(store.active.url).origin !== new URL(store.state.settings.loginUrl).origin;
+  } catch {
+    return false;
+  }
+});
 const visible = computed(
   () =>
     !!store.active &&
@@ -337,7 +345,6 @@ async function closeWorkspace() {
     <main class="workspace-main">
       <div v-if="store.state.access.status === 'away'" class="message" role="status">
         {{ store.state.access.message }}
-        <button class="text-button" @click="store.browser('home')">返回系统首页</button>
       </div>
       <div v-if="store.state.access.status === 'expired'" class="message error" role="alert">
         主账号登录已过期，请重新登录
@@ -423,6 +430,16 @@ async function closeWorkspace() {
               @click="store.browser('home')"
             >
               <Home :size="17" />
+            </button>
+            <button
+              v-if="externalPage"
+              type="button"
+              class="return-page-button"
+              title="返回离开前的原站页面"
+              :disabled="store.busy"
+              @click="store.browser('return')"
+            >
+              <ArrowLeft :size="15" />返回原页面
             </button>
             <button
               type="button"

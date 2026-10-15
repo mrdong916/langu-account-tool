@@ -325,6 +325,19 @@ pub async fn browser_action(
             let config = state.lock()?.settings.clone();
             view.navigate(http_url(&config.login_url)?)?;
         }
+        "return" => {
+            let ws = state.lock()?;
+            let target = ws
+                .sessions
+                .get(&id)
+                .and_then(|session| session.return_url.clone())
+                .ok_or_else(|| AppError::Message("没有可返回的原页面".into()))?;
+            if target.origin() != http_url(&ws.settings.login_url)?.origin() {
+                return Err(AppError::Message("原页面地址已失效".into()));
+            }
+            drop(ws);
+            view.navigate(target)?;
+        }
         "navigate" => view.navigate(http_url(value.as_deref().unwrap_or_default())?)?,
         "devtools" => {
             if view.is_devtools_open() {

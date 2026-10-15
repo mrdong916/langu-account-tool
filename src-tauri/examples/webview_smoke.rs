@@ -256,8 +256,8 @@ async fn check(app: &AppHandle) -> AppResult<()> {
     }
     let config = Settings {
         login_url: match mode.as_str() {
-            "local" => "http://127.0.0.1:1432/",
-            "blocked" => "http://ats-blocked.invalid/", // Reserved domain; macOS ATS denies it.
+            "local" | "external-http" => "http://127.0.0.1:1432/",
+            "blocked" => "http://ats-blocked.invalid/", // Reserved domain; navigation cannot resolve.
             "remote" => "http://languwin.com/",
             _ => return Err(AppError::Message("Unknown smoke mode".into())),
         }
@@ -293,6 +293,40 @@ async fn check(app: &AppHandle) -> AppResult<()> {
     }
     if mode == "remote" {
         return expect_script(&primary, "location.hostname === 'languwin.com' && document.readyState === 'complete' && document.body.innerText.length > 0").await;
+    }
+    if mode == "external-http" {
+        expect_script(
+            &primary,
+            "document.getElementById('account')?.textContent === 'Current account: test.admin'",
+        )
+        .await?;
+        primary.navigate("http://localtest.me:1432/".parse().unwrap())?;
+        expect_script(&primary, "location.hostname === 'localtest.me' && document.readyState === 'complete' && document.body.innerText.length > 0").await?;
+        workspace::sync_primary(app).await?;
+        if app.state::<AppState>().lock()?.access.status
+            != langu_account_tool_lib::domain::access::AccessStatus::Away
+        {
+            return Err(AppError::Message(
+                "External HTTP page did not suspend account management".into(),
+            ));
+        }
+        langu_account_tool_lib::commands::workspace::browser_action(
+            app.get_webview("main").unwrap(),
+            app.clone(),
+            app.state(),
+            "primary".into(),
+            "return".into(),
+            None,
+        )
+        .await?;
+        expect_script(&primary, "location.origin === 'http://127.0.0.1:1432' && document.getElementById('account')?.textContent === 'Current account: test.admin'").await?;
+        workspace::sync_primary(app).await?;
+        if !app.state::<AppState>().lock()?.access.ready() {
+            return Err(AppError::Message(
+                "Returning from external HTTP did not restore access".into(),
+            ));
+        }
+        return Ok(());
     }
     expect_script(
         &primary,
@@ -457,7 +491,32 @@ async fn check(app: &AppHandle) -> AppResult<()> {
     workspace::sync_active(app).await?;
     expect_script(&child, "localStorage.getItem('draft') === 'CHILD-DRAFT'").await?;
     expect_script(&primary, "localStorage.getItem('draft') === 'PRIMARY-DRAFT' && document.getElementById('account')?.textContent === 'Current account: test.admin'").await?;
+    workspace::select(app, "smoke-child".into())?;
+    child.navigate("http://127.0.0.1:1432/second".parse().unwrap())?;
+    expect_script(
+        &child,
+        "location.pathname === '/second' && document.getElementById('account')?.textContent === 'Current account: test.user.01'",
+    )
+    .await?;
+    child.navigate("http://localhost:1432/second".parse().unwrap())?;
+    expect_script(&child, "location.origin === 'http://localhost:1432'").await?;
+    langu_account_tool_lib::commands::workspace::browser_action(
+        app.get_webview("main").unwrap(),
+        app.clone(),
+        app.state(),
+        "smoke-child".into(),
+        "return".into(),
+        None,
+    )
+    .await?;
+    expect_script(
+        &child,
+        "location.origin === 'http://127.0.0.1:1432' && location.pathname === '/second' && document.getElementById('account')?.textContent === 'Current account: test.user.01'",
+    )
+    .await?;
     workspace::select(app, "primary".into())?;
+    primary.navigate("http://127.0.0.1:1432/second".parse().unwrap())?;
+    expect_script(&primary, "location.pathname === '/second'").await?;
     primary.navigate("http://localhost:1432/second".parse().unwrap())?;
     expect_script(
         &primary,
@@ -477,8 +536,16 @@ async fn check(app: &AppHandle) -> AppResult<()> {
             "External page could authorize account management".into(),
         ));
     }
-    primary.navigate(config.login_url.parse().unwrap())?;
-    expect_script(&primary, "location.origin === 'http://127.0.0.1:1432' && document.getElementById('account')?.textContent === 'Current account: test.admin'").await?;
+    langu_account_tool_lib::commands::workspace::browser_action(
+        app.get_webview("main").unwrap(),
+        app.clone(),
+        app.state(),
+        "primary".into(),
+        "return".into(),
+        None,
+    )
+    .await?;
+    expect_script(&primary, "location.origin === 'http://127.0.0.1:1432' && location.pathname === '/second' && document.getElementById('account')?.textContent === 'Current account: test.admin'").await?;
     workspace::sync_primary(app).await?;
     if !app.state::<AppState>().lock()?.access.ready() {
         return Err(AppError::Message(

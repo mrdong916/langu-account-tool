@@ -44,7 +44,12 @@ const account = {
   department: '',
 };
 
-async function renderWorkspace({ user = account, status = 'ready', active = 'primary' } = {}) {
+async function renderWorkspace({
+  user = account,
+  status = 'ready',
+  active = 'primary',
+  url = 'https://example.test/',
+} = {}) {
   const app = createSSRApp(WorkspaceView);
   const pinia = createPinia();
   app.use(pinia);
@@ -53,14 +58,18 @@ async function renderWorkspace({ user = account, status = 'ready', active = 'pri
     id: 'primary',
     role: 'primary',
     account: user,
-    url: 'https://example.test/',
+    url,
     title: '测试系统',
     loading: false,
     status,
     zoom: 1,
   };
   store.apply({
-    settings: { ...store.state.settings, username: account.username },
+    settings: {
+      ...store.state.settings,
+      loginUrl: 'https://example.test/',
+      username: account.username,
+    },
     sessions: user
       ? [
           session,
@@ -104,6 +113,15 @@ test('primary profile retains identity when a child is selected', async () => {
   assert.match(html, /primary-profile[^>]*aria-pressed="false"/);
   assert.match(html, /测试管理员/);
   assert.ok(!html.includes(account.username));
+});
+
+test('external pages show a return button for primary and child accounts', async () => {
+  assert.doesNotMatch(await renderWorkspace(), /返回原页面/);
+  for (const active of ['primary', 'child-test']) {
+    const html = await renderWorkspace({ active, url: 'http://other.example/page' });
+    assert.match(html, /返回原页面/);
+    assert.match(html, /系统首页/);
+  }
 });
 
 test('signed-out state uses the avatar fallback and does not expose remembered username', async () => {
